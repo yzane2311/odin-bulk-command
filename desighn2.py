@@ -1,0 +1,2436 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import os
+import sys
+import tkinter as tk
+from tkinter import ttk, messagebox, filedialog, simpledialog
+import subprocess
+import threading
+import sqlite3
+from datetime import datetime
+import queue # For passing results from thread to main
+import traceback # For detailed error logging
+import webbrowser # For opening URL
+import csv 
+
+try:
+    from PIL import Image, ImageTk
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
+    print("Pillow library not found. Please install it: pip install Pillow. Image features will be limited.")
+
+# Static debug log path and function, defined early for global use
+_DEBUG_LOG_PATH = "application_debug_log.txt"
+
+def log_to_file_debug_globally(message, level="INFO"):
+    try:
+        with open(_DEBUG_LOG_PATH, "a", encoding="utf-8") as f_log:
+            f_log.write(f"[{datetime.now()}] [{level}] {message}\n")
+    except Exception as e:
+        print(f"[CRITICAL_ERROR] Global static log failed: {e} for message: {message}", file=sys.stderr)
+
+log_to_file_debug_globally("Script execution started. Global logger active.")
+
+# Fixed credentials for login
+FIXED_USERNAME = "admin"
+FIXED_PASSWORD = "password" 
+
+# ========== LABELS ==========
+LABELS = {
+    "en": {
+        "title": "Ultimat-Unlock Tool",
+        # "edition" key removed as per request
+        "tab_samsung": "Samsung (ADB)",
+        "tab_honor": "Honor (Fastboot)",
+        "tab_xiaomi": "Xiaomi (ADB + Fastboot)",
+        "tab_file_advanced": "Files & Advanced",
+        "log": "Operation Log",
+        "group_samsung": "Samsung ADB Repair & Utilities",
+        "group_file": "File & App Management",
+        "group_honor": "Honor Fastboot Tools",
+        "group_xiaomi_adb": "Xiaomi ADB Mode",
+        "group_xiaomi_fastboot": "Xiaomi Fastboot Mode",
+        "group_advanced_cmd": "Advanced Command Execution",
+        "btn_connection": "Check Connection",
+        "btn_info": "Device Info",
+        "btn_reboot_dl": "Reboot Download",
+        "btn_reboot_rec": "Reboot Recovery",
+        "btn_reboot_bl": "Reboot Bootloader",
+        "btn_remove_frp": "Remove FRP (ADB)",
+        "btn_usb_debug": "Enable USB Debug",
+        "btn_repair_network": "Repair Network (root)",
+        "btn_fix_perms": "Fix System Permissions",
+        "btn_reset_wifi": "Reset WiFi",
+        "btn_factory_reset": "Factory Reset (ADB)",
+        "btn_mount_rw": "Mount System RW (root)",
+        "btn_wipe_cache": "Wipe Cache (root)",
+        "btn_clear_dalvik": "Clear Dalvik (root)",
+        "btn_screenlock_reset": "Reset Screen Lock (ADB)",
+        "btn_arabize_device": "Arabize Device (ADB)",
+        "btn_open_browser_adb": "Open Browser (ADB)",
+        "pull_file_title": "Pull File from Device",
+        "pull_file_device_path_msg": "Enter device source path (e.g., /sdcard/file.txt):",
+        "push_file_title": "Push File to Device",
+        "push_file_device_path_msg": "Enter device destination path (e.g., /sdcard/newfile.txt):",
+        "install_apk_title": "Select APK to Install",
+        "uninstall_title": "Uninstall App",
+        "uninstall_msg": "Enter package name (e.g., com.example.app):",
+        "honor_frp_code_title": "Enter Honor FRP Key",
+        "honor_frp_code_msg": "Please enter the Honor FRP unlock key:",
+        "advanced_cmd_label": "Enter ADB or Fastboot command:",
+        "btn_run_advanced_cmd": "Run Command",
+        "adb_status_connected": "ADB: Connected",
+        "adb_status_not_connected": "ADB: Not Connected",
+        "search_log_label": "Search Log:", 
+        "find_button": "Find", 
+        "all_button": "All", 
+        "export_button": "Export to TXT", 
+        "btn_export_csv": "Export to CSV", 
+        "btn_cancel_operation": "Cancel Operation", 
+        "quit_dialog_title": "Quit",
+        "quit_dialog_message": "Do you want to quit Ultimat-Unlock Tool?",
+        "dependency_check_title": "Dependency Check",
+        "adb_not_found_message": "ADB (Android Debug Bridge) not found or not working. Some features will be unavailable. Please install/configure ADB and add it to your system PATH.",
+        "fastboot_not_found_message": "Fastboot not found or not working. Some features will be unavailable. Please install/configure Fastboot and add it to your system PATH.",
+        "fatal_error_title": "Fatal Error",
+        "fatal_error_message_prefix": "A critical error occurred:",
+        "btn_get_detailed_info": "Read Device Info (ADB)", 
+        "btn_pull_file": "Pull File from Device",
+        "btn_push_file": "Push File to Device",
+        "btn_install_apk": "Install APK",
+        "btn_uninstall_app": "Uninstall App",
+        "btn_backup_user_data_adb": "Backup User Data (ADB)", 
+        "btn_restore_user_data_adb": "Restore User Data (ADB)", 
+        "backup_user_data_title": "Select Backup File Location",
+        "backup_user_data_msg": "Choose where to save the user data backup (.ab file):",
+        "restore_user_data_title": "Select Backup File to Restore",
+        "restore_user_data_msg": "Choose the user data backup file (.ab) to restore:",
+        "btn_honor_info": "Read Serial & Software Info",
+        "honor_frp_key_label": "Honor FRP Key:",
+        "btn_honor_frp": "Remove FRP (Honor Code)",
+        "btn_honor_reboot_bl": "Reboot Bootloader (Honor)",
+        "btn_honor_reboot_edl": "Reboot EDL (Honor)",
+        "btn_honor_wipe_data_cache": "Wipe Data/Cache (Honor)",
+        "btn_xiaomi_adb_info": "Read Device Info (ADB)", 
+        "btn_xiaomi_enable_diag_root": "Enable Diag (ROOT)",
+        "btn_xiaomi_reset_frp_adb": "Reset FRP (ADB)", 
+        "btn_xiaomi_bypass_mi_account": "Bypass Mi Account (ADB)", 
+        "btn_xiaomi_reboot_normal_adb": "Reboot Normal (ADB)",
+        "btn_xiaomi_reboot_fastboot_adb": "Reboot Fastboot (ADB)",
+        "btn_xiaomi_reboot_recovery_adb": "Reboot Recovery (ADB)",
+        "btn_xiaomi_reboot_edl_adb": "Reboot EDL (ADB)",
+        "btn_xiaomi_fastboot_info": "Read Info (Fastboot)",
+        "btn_xiaomi_fastboot_read_security": "Read Security (Fastboot)",
+        "btn_xiaomi_fastboot_unlock": "Unlock Bootloader (Fastboot)",
+        "btn_xiaomi_fastboot_lock": "Lock Bootloader (Fastboot)",
+        "btn_xiaomi_fastboot_reboot_sys": "Reboot System (Fastboot)",
+        "btn_xiaomi_fastboot_reboot_fast": "Reboot Fastboot (Fastboot)",
+        "btn_xiaomi_fastboot_reboot_edl": "Reboot EDL (Fastboot)",
+        "btn_xiaomi_fastboot_wipe_cache": "Wipe Cache (Fastboot)",
+        "btn_xiaomi_fastboot_wipe_data": "Wipe Data (Fastboot)",
+        "lang": "Language",
+        "theme": "Theme",
+        "light": "Light",
+        "dark": "Dark",
+        "professional_dark": "Professional Dark",
+        "arabic": "Arabic",
+        "english": "English",
+        "login_title": "Ultimat-Unlock Tool Login", # Changed
+        "username_label": "Username:",
+        "password_label": "Password:",
+        "login_button": "Login",
+        "login_failed_title": "Login Failed",
+        "login_failed_message": "Invalid username or password.",
+        "arabize_confirm_title": "Confirm Arabization",
+        "arabize_confirm_message": "This will attempt to change the device language to Arabic (ar-AE).\nThis may require specific permissions and might not work on all devices.\nProceed?",
+        # "arabize_note" removed
+        "open_browser_title": "Open URL in Device Browser",
+        "open_browser_prompt": "Enter the full URL to open (e.g., https://ultimat-unlock.com/):",
+        "frp_reset_warning_title": "FRP Reset Attempt",
+        "frp_reset_warning_message": "This will attempt a series of common ADB commands to reset FRP. These commands are not guaranteed to work on all devices or Android versions and may require specific permissions or root access. Proceed with caution.",
+        "context_cut": "Cut",
+        "context_copy": "Copy",
+        "context_paste": "Paste",
+        "context_select_all": "Select All",
+        "log_connect_server_success": "Connect to server...successful",
+        "log_operation_started": "Operation Started: ",
+        "log_device_info_header": "Device Information:",
+        "log_frp_reset_ok": "FRP Reset.... OK",
+        "log_frp_reset_fail": "FRP Reset.... FAILED",
+        "log_read_info_complete": "Read Info.... COMPLETE",
+        "btn_telegram_channel": "Telegram Channel",
+        "btn_contact_support": "Contact Support",
+        "device_status_panel_title": "Connected Device Status",
+        "status_model": "Model:",
+        "status_android": "Android:",
+        "status_connection": "Connection:",
+        "status_root": "Root:",
+        "status_unknown": "Unknown",
+        "btn_refresh_status": "Refresh",
+        "btn_browse_apps": "Browse Apps",
+        "app_browser_title": "Installed Applications Browser",
+        "app_browser_package_name": "Package Name",
+        "app_browser_apk_path": "APK Path",
+        "app_browser_refresh_list": "Refresh List",
+        "app_browser_no_apps": "No applications found or error listing them."
+
+    },
+    "ar": {
+        "title": "أداة Ultimat-Unlock",
+        # "edition" key removed
+        "tab_samsung": "سامسونج (ADB)",
+        "tab_honor": "هونور (Fastboot)",
+        "tab_xiaomi": "شاومي (ADB + Fastboot)",
+        "tab_file_advanced": "ملفات وأدوات متقدمة",
+        "log": "سجل العمليات",
+        "group_samsung": "إصلاح سامسونج وأدوات ADB",
+        "group_file": "إدارة الملفات والتطبيقات",
+        "group_honor": "أدوات هونور Fastboot",
+        "group_xiaomi_adb": "شاومي وضع ADB",
+        "group_xiaomi_fastboot": "شاومي وضع Fastboot",
+        "group_advanced_cmd": "تنفيذ أوامر متقدمة",
+        "btn_connection": "فحص الاتصال",
+        "btn_info": "معلومات الجهاز",
+        "btn_reboot_dl": "إعادة تشغيل لوضع الداونلود",
+        "btn_reboot_rec": "إعادة تشغيل للريكفري",
+        "btn_reboot_bl": "إعادة تشغيل للبوتلودر",
+        "btn_remove_frp": "إزالة FRP (ADB)",
+        "btn_usb_debug": "تفعيل تصحيح USB",
+        "btn_repair_network": "إصلاح الشبكة (روت)",
+        "btn_fix_perms": "إصلاح صلاحيات النظام",
+        "btn_reset_wifi": "إعادة ضبط WiFi",
+        "btn_factory_reset": "إعادة ضبط المصنع (ADB)",
+        "btn_mount_rw": "جعل النظام قابل للكتابة (روت)",
+        "btn_wipe_cache": "مسح الكاش (روت)",
+        "btn_clear_dalvik": "مسح دالفك (روت)",
+        "btn_screenlock_reset": "إزالة قفل الشاشة (ADB)",
+        "btn_arabize_device": "تعريب الهاتف (ADB)",
+        "btn_open_browser_adb": "فتح المتصفح (ADB)",
+        "pull_file_title": "سحب ملف من الجهاز",
+        "pull_file_device_path_msg": "أدخل مسار الملف المصدر بالجهاز (مثال: /sdcard/file.txt):",
+        "push_file_title": "رفع ملف إلى الجهاز",
+        "push_file_device_path_msg": "أدخل مسار الوجهة بالجهاز (مثال: /sdcard/newfile.txt):",
+        "install_apk_title": "اختر ملف APK للتثبيت",
+        "uninstall_title": "حذف تطبيق",
+        "uninstall_msg": "أدخل اسم الحزمة (مثال: com.example.app):",
+        "honor_frp_code_title": "إدخال رمز FRP لهونور",
+        "honor_frp_code_msg": "الرجاء إدخال رمز فك قفل FRP الخاص بهونور:",
+        "advanced_cmd_label": "أدخل أمر ADB أو Fastboot:",
+        "btn_run_advanced_cmd": "تنفيذ الأمر",
+        "adb_status_connected": "ADB: متصل",
+        "adb_status_not_connected": "ADB: غير متصل",
+        "search_log_label": "بحث في السجل:",
+        "find_button": "بحث",
+        "all_button": "الكل",
+        "export_button": "تصدير إلى TXT",
+        "btn_export_csv": "تصدير إلى CSV",
+        "btn_cancel_operation": "إلغاء العملية",
+        "quit_dialog_title": "خروج",
+        "quit_dialog_message": "هل تريد الخروج من أداة Ultimat-Unlock؟",
+        "dependency_check_title": "فحص الاعتماديات",
+        "adb_not_found_message": "ADB (Android Debug Bridge) غير موجود أو لا يعمل. بعض الميزات لن تكون متاحة. الرجاء تثبيت/تكوين ADB وإضافته إلى مسار النظام.",
+        "fastboot_not_found_message": "Fastboot غير موجود أو لا يعمل. بعض الميزات لن تكون متاحة. الرجاء تثبيت/تكوين Fastboot وإضافته إلى مسار النظام.",
+        "fatal_error_title": "خطأ فادح",
+        "fatal_error_message_prefix": "حدث خطأ حرج:",
+        "btn_get_detailed_info": "قراءة معلومات الجهاز (ADB)", 
+        "btn_pull_file": "سحب ملف من الجهاز",
+        "btn_push_file": "رفع ملف إلى الجهاز",
+        "btn_install_apk": "تثبيت APK",
+        "btn_uninstall_app": "حذف تطبيق",
+        "btn_backup_user_data_adb": "نسخ احتياطي لبيانات المستخدم (ADB)", 
+        "btn_restore_user_data_adb": "استعادة بيانات المستخدم (ADB)", 
+        "backup_user_data_title": "اختر موقع ملف النسخ الاحتياطي",
+        "backup_user_data_msg": "اختر مكان حفظ النسخ الاحتياطي لبيانات المستخدم (ملف .ab):",
+        "restore_user_data_title": "اختر ملف النسخ الاحتياطي للاستعادة",
+        "restore_user_data_msg": "اختر ملف النسخ الاحتياطي لبيانات المستخدم (.ab) للاستعادة:",
+        "btn_honor_info": "قراءة معلومات وسيريال هونور",
+        "honor_frp_key_label": "رمز FRP لهونور:",
+        "btn_honor_frp": "إزالة FRP (رمز هونور)",
+        "btn_honor_reboot_bl": "إعادة تشغيل للبوتلودر (هونور)",
+        "btn_honor_reboot_edl": "إعادة تشغيل لوضع EDL (هونور)",
+        "btn_honor_wipe_data_cache": "مسح الداتا والكاش (هونور)",
+        "btn_xiaomi_adb_info": "قراءة معلومات الجهاز (ADB)", 
+        "btn_xiaomi_enable_diag_root": "تفعيل Diag (روت)",
+        "btn_xiaomi_reset_frp_adb": "إعادة تعيين FRP (ADB)", 
+        "btn_xiaomi_bypass_mi_account": "تجاوز حساب Mi (ADB)", 
+        "btn_xiaomi_reboot_normal_adb": "إعادة تشغيل عادي (ADB)",
+        "btn_xiaomi_reboot_fastboot_adb": "إعادة تشغيل فاستبوت (ADB)",
+        "btn_xiaomi_reboot_recovery_adb": "إعادة تشغيل ريكفري (ADB)",
+        "btn_xiaomi_reboot_edl_adb": "إعادة تشغيل EDL (ADB)",
+        "btn_xiaomi_fastboot_info": "قراءة المعلومات (Fastboot)",
+        "btn_xiaomi_fastboot_read_security": "قراءة الأمان (Fastboot)",
+        "btn_xiaomi_fastboot_unlock": "فتح البوتلودر (Fastboot)",
+        "btn_xiaomi_fastboot_lock": "قفل البوتلودر (Fastboot)",
+        "btn_xiaomi_fastboot_reboot_sys": "إعادة تشغيل للنظام (Fastboot)",
+        "btn_xiaomi_fastboot_reboot_fast": "إعادة تشغيل فاستبوت (Fastboot)",
+        "btn_xiaomi_fastboot_reboot_edl": "إعادة تشغيل EDL (Fastboot)",
+        "btn_xiaomi_fastboot_wipe_cache": "مسح الكاش (Fastboot)",
+        "btn_xiaomi_fastboot_wipe_data": "مسح الداتا (Fastboot)",
+        "lang": "اللغة",
+        "theme": "الثيم",
+        "light": "فاتح",
+        "dark": "داكن",
+        "professional_dark": "داكن احترافي",
+        "arabic": "العربية",
+        "english": "الإنجليزية",
+        "login_title": "تسجيل دخول أداة Ultimat-Unlock", # Changed
+        "username_label": "اسم المستخدم:",
+        "password_label": "كلمة المرور:",
+        "login_button": "تسجيل الدخول",
+        "login_failed_title": "فشل تسجيل الدخول",
+        "login_failed_message": "اسم المستخدم أو كلمة المرور غير صحيحة.",
+        "arabize_confirm_title": "تأكيد التعريب",
+        "arabize_confirm_message": "سيحاول هذا الإجراء تغيير لغة الجهاز إلى العربية (ar-AE).\nقد يتطلب هذا أذونات معينة وقد لا يعمل على جميع الأجهزة.\nمتابعة؟",
+        # "arabize_note" removed
+        "open_browser_title": "فتح رابط في متصفح الجهاز",
+        "open_browser_prompt": "أدخل الرابط الكامل للفتح (مثال: https://ultimat-unlock.com/):",
+        "frp_reset_warning_title": "محاولة إزالة FRP",
+        "frp_reset_warning_message": "سيقوم هذا الإجراء بمحاولة تنفيذ سلسلة من أوامر ADB الشائعة لإزالة قفل FRP. هذه الأوامر ليست مضمونة للعمل على جميع الأجهزة أو إصدارات أندرويد وقد تتطلب أذونات معينة أو صلاحيات الروت. تابع بحذر.",
+        "context_cut": "قص",
+        "context_copy": "نسخ",
+        "context_paste": "لصق",
+        "context_select_all": "تحديد الكل",
+        "log_connect_server_success": "الاتصال بالخادم... ناجح",
+        "log_operation_started": "بدء العملية: ",
+        "log_device_info_header": "معلومات الجهاز:",
+        "log_frp_reset_ok": "إعادة تعيين FRP.... تم بنجاح",
+        "log_frp_reset_fail": "إعادة تعيين FRP.... فشل",
+        "log_read_info_complete": "قراءة المعلومات.... اكتمل",
+        "btn_telegram_channel": "قناة تيليجرام",
+        "btn_contact_support": "تواصل مع الدعم",
+        "device_status_panel_title": "حالة الجهاز المتصل",
+        "status_model": "الطراز:",
+        "status_android": "أندرويد:",
+        "status_connection": "الاتصال:",
+        "status_root": "الروت:",
+        "status_unknown": "غير معروف",
+        "btn_refresh_status": "تحديث",
+        "btn_browse_apps": "تصفح التطبيقات",
+        "app_browser_title": "متصفح التطبيقات المثبتة",
+        "app_browser_package_name": "اسم الحزمة",
+        "app_browser_apk_path": "مسار APK",
+        "app_browser_refresh_list": "تحديث القائمة",
+        "app_browser_no_apps": "لم يتم العثور على تطبيقات أو خطأ في عرضها."
+    }
+}
+log_to_file_debug_globally("LABELS defined.")
+
+# ========== THEMES ==========
+DARK_BLUE_ACCENT = "#0A2463" # A very dark, rich blue
+DARK_BLUE_ACCENT2 = "#071A48" # Even darker for hover/active
+LOGIN_BG_COLOR = "#1C1E26" # Dark background for login, similar to some tools
+
+THEMES = {
+    "light": {
+        "BG": "#ECEFF1", "FG": "#263238", "ACCENT": DARK_BLUE_ACCENT, "ACCENT2": DARK_BLUE_ACCENT2, "PROGRESS_BAR_BG": "#2ECC71",
+        "BTN_BG": DARK_BLUE_ACCENT, "BTN_BG2": DARK_BLUE_ACCENT2, "BTN_FG": "#FFFFFF", "BTN_BORDER": DARK_BLUE_ACCENT2,
+        "GROUP_BG": "#FFFFFF", "LOG_BG": "#CFD8DC", "DEVICE_STATUS_BG": "#B0BEC5", "DEVICE_STATUS_FG": "#263238",
+        "LOGIN_BG": "#E0E0E0", "LOGIN_FG": "#000000", "LOGIN_ENTRY_BG": "#FFFFFF",
+        "LOG_FG_SUCCESS": "#4CAF50", "LOG_FG_INFO": "#2196F3", "LOG_FG_ERROR": "#F44336",
+        "LOG_FG_FAIL": "#D32F2F", "LOG_FG_CMD": "#00796B", "LOG_FG_WARNING": "#FF9800",
+        "STATUS_BAR_BG": "#B0BEC5", "STATUS_BAR_FG": "#263238",
+        "NOTEBOOK_TAB_BG": "#B0BEC5", "NOTEBOOK_TAB_FG": "#37474F",
+        "NOTEBOOK_TAB_SELECTED_BG": DARK_BLUE_ACCENT, "NOTEBOOK_TAB_SELECTED_FG": "#FFFFFF",
+        "NOTEBOOK_TAB_ACTIVE_BG": DARK_BLUE_ACCENT2
+    },
+    "dark": {
+        "BG": "#263238", "FG": "#ECEFF1", "ACCENT": DARK_BLUE_ACCENT, "ACCENT2": DARK_BLUE_ACCENT2, "PROGRESS_BAR_BG": "#2ECC71",
+        "BTN_BG": DARK_BLUE_ACCENT, "BTN_BG2": DARK_BLUE_ACCENT2, "BTN_FG": "#FFFFFF", "BTN_BORDER": DARK_BLUE_ACCENT,
+        "GROUP_BG": "#37474F", "LOG_BG": "#455A64", "DEVICE_STATUS_BG": "#37474F", "DEVICE_STATUS_FG": "#ECEFF1",
+        "LOGIN_BG": LOGIN_BG_COLOR, "LOGIN_FG": "#EAEAEA", "LOGIN_ENTRY_BG": "#2A2D35",
+        "LOG_FG_SUCCESS": "#81C784", "LOG_FG_INFO": "#64B5F6", "LOG_FG_ERROR": "#E57373",
+        "LOG_FG_FAIL": "#EF5350", "LOG_FG_CMD": "#4DB6AC", "LOG_FG_WARNING": "#FFB74D",
+        "STATUS_BAR_BG": "#212121", "STATUS_BAR_FG": DARK_BLUE_ACCENT,
+        "NOTEBOOK_TAB_BG": "#37474F", "NOTEBOOK_TAB_FG": "#B0BEC5",
+        "NOTEBOOK_TAB_SELECTED_BG": DARK_BLUE_ACCENT, "NOTEBOOK_TAB_SELECTED_FG": "#FFFFFF",
+        "NOTEBOOK_TAB_ACTIVE_BG": DARK_BLUE_ACCENT2
+    },
+    "professional_dark": {
+        "BG": "#21252B", "FG": "#D1D9E0", "ACCENT": DARK_BLUE_ACCENT, "ACCENT2": DARK_BLUE_ACCENT2, "PROGRESS_BAR_BG": "#2ECC71", 
+        "BTN_BG": DARK_BLUE_ACCENT, "BTN_BG2": DARK_BLUE_ACCENT2, "BTN_FG": "#FFFFFF", "BTN_BORDER": DARK_BLUE_ACCENT, # Border same as accent for flatter look
+        "GROUP_BG": "#2C313A", "LOG_BG": "#2C313A", "DEVICE_STATUS_BG": "#282C34", "DEVICE_STATUS_FG": "#D1D9E0", # Slightly different for status panel
+        "LOGIN_BG": LOGIN_BG_COLOR, "LOGIN_FG": "#EAEAEA", "LOGIN_ENTRY_BG": "#2A2D35",
+        "LOG_FG_SUCCESS": "#2ECC71", "LOG_FG_INFO": "#3498DB", "LOG_FG_ERROR": "#E74C3C", 
+        "LOG_FG_FAIL": "#C0392B", "LOG_FG_CMD": "#1ABC9C", "LOG_FG_WARNING": "#F39C12", 
+        "STATUS_BAR_BG": "#1A1D21", "STATUS_BAR_FG": DARK_BLUE_ACCENT,
+        "NOTEBOOK_TAB_BG": "#2C313A", "NOTEBOOK_TAB_FG": "#AAB8C5",
+        "NOTEBOOK_TAB_SELECTED_BG": DARK_BLUE_ACCENT, "NOTEBOOK_TAB_SELECTED_FG": "#FFFFFF",
+        "NOTEBOOK_TAB_ACTIVE_BG": DARK_BLUE_ACCENT2,
+        "TITLE_FG": "#FFFFFF"
+        # "EDITION_FG" removed
+    }
+}
+log_to_file_debug_globally("THEMES defined.")
+
+FONT = ("Segoe UI", 9) # Slightly smaller default font
+TITLE_FONT = ("Segoe UI Semibold", 18) 
+APP_LOGO_TITLE_FONT = ("Segoe UI Semibold", 17) # Slightly larger for main title
+DEVICE_STATUS_FONT_LABEL = ("Segoe UI", 9, "bold")
+DEVICE_STATUS_FONT_VALUE = ("Segoe UI", 9)
+LABEL_FONT = ("Segoe UI", 9, "bold")
+BTN_FONT = ("Segoe UI", 9, "bold") # Smaller button font
+LOG_FONT = ("Consolas", 10) # Slightly smaller log font
+LOGIN_TITLE_FONT = ("Segoe UI Semibold", 16)
+LOGIN_ENTRY_FONT = ("Segoe UI", 10)
+
+log_to_file_debug_globally("FONTS defined.")
+
+# --- Global storage for images to prevent garbage collection ---
+app_images = {}
+
+def load_image(image_path, size=None):
+    if not PIL_AVAILABLE:
+        log_to_file_debug_globally(f"Pillow not available, cannot load {image_path}.", "WARNING")
+        return None
+    try:
+        base_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+        full_path = os.path.join(base_dir, image_path)
+        
+        img = Image.open(full_path)
+        if size:
+            img = img.resize(size, Image.Resampling.LANCZOS)
+        return ImageTk.PhotoImage(img)
+    except FileNotFoundError:
+        log_to_file_debug_globally(f"Image file not found: {full_path}", "ERROR")
+    except Exception as e:
+        log_to_file_debug_globally(f"Error loading image {full_path}: {e}", "ERROR")
+    return None
+
+DEVICE_INFO_PROPERTIES = [
+    ("Model", "ro.product.model"), 
+    ("Device", "ro.product.device"), 
+    ("Brand Name", "ro.product.brand"),
+    ("Chipset", "ro.board.platform"), 
+    ("Hw Version", "ro.hardware"), 
+    ("Android Version", "ro.build.version.release"),
+    ("Usb.config", "sys.usb.config"), 
+    ("Model ID", "ro.build.display.id"), 
+    ("PDA", "ro.build.id"), 
+    ("Platform", "ro.product.cpu.abi"), 
+    ("language", "ro.product.locale"),
+    ("Security Patch", "ro.build.version.security_patch"),
+    ("Root State", "ro.secure"), 
+    ("Encryption State", "ro.crypto.state"), 
+    ("Bootloader State", "ro.bootloader"), 
+    ("description", "ro.build.description")
+]
+
+
+def get_labels(lang):
+    return LABELS.get(lang, LABELS["en"])
+
+def get_theme(theme_name):
+    return THEMES.get(theme_name, THEMES["professional_dark"])
+
+class ModernButton(tk.Button):
+    def __init__(self, master, text, command, theme, width=22, height=1, icon_path=None, icon_size=(14,14), state=tk.NORMAL, **kwargs): 
+        self.icon_image = None 
+        if icon_path and PIL_AVAILABLE:
+            try:
+                self.icon_image = load_image(icon_path, size=icon_size)
+                if self.icon_image:
+                    # Store a unique key for the image to prevent GC
+                    app_images[f"btn_icon_{os.path.basename(icon_path)}_{text}"] = self.icon_image
+            except Exception as e:
+                log_to_file_debug_globally(f"Failed to load button icon {icon_path}: {e}", "WARNING")
+                self.icon_image = None
+
+        super().__init__(
+            master, text=text, command=command, font=BTN_FONT,
+            bg=theme["BTN_BG"], fg=theme["BTN_FG"],
+            activebackground=theme["BTN_BG2"], activeforeground=theme["BTN_FG"],
+            bd=kwargs.pop('bd', 1),  # Subtle border
+            relief=kwargs.pop('relief', "flat"), # Flatter look
+            cursor="hand2", height=height, width=width,
+            padx=kwargs.pop('padx', 6 if self.icon_image else 8), # Adjusted padding
+            pady=kwargs.pop('pady', 3), # Adjusted padding
+            image=self.icon_image, compound=tk.LEFT if self.icon_image else tk.NONE,
+            state=state, **kwargs) 
+        
+        self.theme = theme
+        self.default_bg = theme["BTN_BG"]
+        self.hover_bg = theme["BTN_BG2"]
+        # Make highlight same as background for flatter feel if border is 0, else use border color
+        self.config(highlightthickness=1, highlightbackground=theme.get("BTN_BORDER", theme["ACCENT"]) if self.cget('bd') > 0 else self.default_bg)
+        
+        if state == tk.NORMAL:
+            self.bind("<Enter>", lambda e: self.config(bg=self.hover_bg) if self.cget('state') == tk.NORMAL else None)
+            self.bind("<Leave>", lambda e: self.config(bg=self.default_bg) if self.cget('state') == tk.NORMAL else None)
+        elif state == tk.DISABLED:
+            self.config(bg=theme.get("GROUP_BG", "#2C313A"), fg=theme.get("NOTEBOOK_TAB_FG", "#AAB8C5"))
+
+
+class DBLogger:
+    # ... (No changes to DBLogger)
+    def __init__(self, dbfile=None, tk_root=None):
+        log_to_file_debug_globally("DBLogger __init__ started.")
+        if dbfile is None:
+            try:
+                base_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+                dbfile = os.path.join(base_dir, "operation_log.db")
+                os.makedirs(os.path.dirname(dbfile), exist_ok=True)
+                with open(dbfile, "a") as f_db_check: 
+                    os.utime(dbfile, None)
+                log_to_file_debug_globally(f"DBLogger: DB file path set to: {dbfile}")
+            except Exception as e_db_path1:
+                log_to_file_debug_globally(f"DBLogger: Failed to create DB at primary path {dbfile}: {e_db_path1}", "WARNING")
+                try:
+                    user_dir = os.path.expanduser("~")
+                    dbfile_fallback = os.path.join(user_dir, ".UltimatUnlockTool", "operation_log.db")
+                    os.makedirs(os.path.dirname(dbfile_fallback), exist_ok=True)
+                    with open(dbfile_fallback, "a") as f_db_check_fb:
+                         os.utime(dbfile_fallback, None)
+                    dbfile = dbfile_fallback
+                    log_to_file_debug_globally(f"DBLogger: DB file path set to fallback: {dbfile}")
+                except Exception as e_db_path2:
+                    log_to_file_debug_globally(f"DBLogger: Failed to create DB at fallback path {dbfile_fallback}: {e_db_path2}", "ERROR")
+                    dbfile = ":memory:" 
+                    log_to_file_debug_globally("DBLogger: Using in-memory database as last resort.")
+        
+        self.dbfile = dbfile
+        self.tk_root = tk_root
+        self.conn = None
+        self.cursor = None
+        
+        try:
+            self.conn = sqlite3.connect(self.dbfile, check_same_thread=False) 
+            self.cursor = self.conn.cursor()
+            self.cursor.execute('''CREATE TABLE IF NOT EXISTS logs
+                                (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                 timestamp TEXT,
+                                 tag TEXT,
+                                 message TEXT)''')
+            self.conn.commit()
+            log_to_file_debug_globally("DBLogger: Database initialized/checked.")
+        except Exception as e_db_init:
+            log_to_file_debug_globally(f"DBLogger: Database initialization error: {e_db_init}", "ERROR")
+            if self.conn:
+                self.conn.close()
+            self.conn = None 
+            self.cursor = None
+        log_to_file_debug_globally("DBLogger __init__ finished.")
+
+    def add(self, message, tag="info"):
+        if not self.conn or not self.cursor:
+            log_to_file_debug_globally(f"DBLogger: Cannot add log, database not initialized. Message: {message}", "WARNING")
+            return
+        
+        try:
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self.cursor.execute("INSERT INTO logs (timestamp, tag, message) VALUES (?, ?, ?)",
+                               (timestamp, tag, message))
+            self.conn.commit()
+        except Exception as e_add:
+            log_to_file_debug_globally(f"DBLogger: Error adding log: {e_add}. Message: {message}", "ERROR")
+
+    def search(self, term): 
+        if not self.conn or not self.cursor:
+            log_to_file_debug_globally(f"DBLogger: Cannot search, database not initialized. Term: {term}", "WARNING")
+            return []
+        
+        try:
+            self.cursor.execute("SELECT timestamp, tag, message FROM logs WHERE message LIKE ? ORDER BY id DESC LIMIT 1000",
+                               (f"%{term}%",))
+            return self.cursor.fetchall()
+        except Exception as e_search:
+            log_to_file_debug_globally(f"DBLogger: Error searching logs: {e_search}. Term: {term}", "ERROR")
+            return []
+
+    def all(self, limit=1000): 
+        if not self.conn or not self.cursor:
+            log_to_file_debug_globally("DBLogger: Cannot fetch all, database not initialized.", "WARNING")
+            return []
+        
+        try:
+            self.cursor.execute("SELECT timestamp, tag, message FROM logs ORDER BY id DESC LIMIT ?", (limit,))
+            return self.cursor.fetchall()
+        except Exception as e_all:
+            log_to_file_debug_globally(f"DBLogger: Error fetching all logs: {e_all}", "ERROR")
+            return []
+
+    def close(self):
+        if self.conn:
+            try:
+                self.conn.close()
+                log_to_file_debug_globally("DBLogger: Database connection closed.")
+            except Exception as e_close:
+                log_to_file_debug_globally(f"DBLogger: Error closing database: {e_close}", "ERROR")
+
+
+class TextContextMenu:
+    # ... (No changes to TextContextMenu)
+    def __init__(self, widget, tk_root, labels):
+        self.widget = widget
+        self.tk_root = tk_root 
+        self.labels = labels    
+        self.menu = tk.Menu(widget, tearoff=0)
+
+        self.menu.add_command(label=self.labels.get("context_cut", "Cut"), command=self.cut)
+        self.menu.add_command(label=self.labels.get("context_copy", "Copy"), command=self.copy)
+        self.menu.add_command(label=self.labels.get("context_paste", "Paste"), command=self.paste)
+        self.menu.add_separator()
+        self.menu.add_command(label=self.labels.get("context_select_all", "Select All"), command=self.select_all)
+
+        widget.bind("<Button-3>", self.show_menu) 
+
+    def show_menu(self, event):
+        has_selection = False
+        try:
+            if self.widget.selection_get():
+                has_selection = True
+        except tk.TclError:
+            has_selection = False
+
+        is_editable = isinstance(self.widget, (tk.Entry, tk.Text)) and self.widget.cget('state') == tk.NORMAL
+        self.menu.entryconfig(self.labels.get("context_cut", "Cut"), state=tk.NORMAL if has_selection and is_editable else tk.DISABLED)
+        self.menu.entryconfig(self.labels.get("context_copy", "Copy"), state=tk.NORMAL if has_selection else tk.DISABLED)
+        
+        can_paste = False
+        try:
+            if self.tk_root.clipboard_get() and is_editable :
+                can_paste = True
+        except tk.TclError: 
+            can_paste = False
+        self.menu.entryconfig(self.labels.get("context_paste", "Paste"), state=tk.NORMAL if can_paste else tk.DISABLED)
+        
+        has_text = False
+        if isinstance(self.widget, tk.Text):
+            if self.widget.get("1.0", tk.END).strip(): 
+                has_text = True
+        elif isinstance(self.widget, tk.Entry):
+            if self.widget.get().strip(): 
+                has_text = True
+        
+        self.menu.entryconfig(self.labels.get("context_select_all", "Select All"), state=tk.NORMAL if has_text else tk.DISABLED)
+
+        self.menu.tk_popup(event.x_root, event.y_root)
+
+    def cut(self):
+        try:
+            if self.widget.selection_get() and self.widget.cget('state') == tk.NORMAL:
+                self.widget.event_generate("<<Cut>>")
+        except tk.TclError:
+            pass 
+
+    def copy(self):
+        try:
+            if self.widget.selection_get():
+                self.widget.event_generate("<<Copy>>")
+        except tk.TclError:
+            pass 
+
+    def paste(self):
+        try:
+            if self.widget.cget('state') == tk.NORMAL: 
+                 self.widget.event_generate("<<Paste>>")
+        except tk.TclError:
+            pass 
+
+    def select_all(self):
+        if isinstance(self.widget, tk.Text):
+            self.widget.tag_add(tk.SEL, "1.0", tk.END)
+            self.widget.mark_set(tk.INSERT, "1.0") 
+            self.widget.see(tk.INSERT) 
+        elif isinstance(self.widget, tk.Entry):
+            self.widget.select_range(0, tk.END)
+            self.widget.icursor(tk.END) 
+        return "break" 
+
+
+class ProgressBarManager(tk.Frame):
+    # ... (No changes to ProgressBarManager)
+    def __init__(self, master, theme):
+        super().__init__(master, bg=theme["BG"])
+        self.var = tk.IntVar(value=0)
+        progress_bar_color = theme.get("PROGRESS_BAR_BG", "#2ECC71") 
+        
+        lightcolor = progress_bar_color 
+        darkcolor = theme.get("ACCENT2", DARK_BLUE_ACCENT2) 
+        troughcolor = theme.get("GROUP_BG", theme.get("BG", "#21252B")) 
+        bordercolor = progress_bar_color 
+
+        thickness = 12
+
+        self.pb = ttk.Progressbar(
+            self,
+            orient="horizontal",
+            mode="indeterminate", 
+            variable=self.var,
+            style="Green.Horizontal.TProgressbar" 
+        )
+        self.running = False 
+
+        style = ttk.Style()
+        style.configure(
+            "Green.Horizontal.TProgressbar",
+            troughcolor=troughcolor,
+            bordercolor=bordercolor,
+            background=progress_bar_color, 
+            lightcolor=lightcolor, 
+            darkcolor=darkcolor,   
+            thickness=thickness
+        )
+        self.pb.pack(fill=tk.X, padx=10, pady=(2,5)) 
+
+    def start(self): 
+        if not self.winfo_exists(): return
+        if not self.running:
+            self.pb.config(mode="indeterminate")
+            self.pb.start(10) 
+            self.running = True
+
+    def stop(self): 
+        if not self.winfo_exists(): return
+        if self.running:
+            self.pb.stop()
+            self.running = False
+        self.pb.config(mode="determinate") 
+        self.var.set(0) 
+        self.pb.update_idletasks()
+
+    def set_value(self, percent): 
+        if not self.winfo_exists(): return
+        if self.running: 
+            self.pb.stop()
+            self.running = False
+        self.pb.config(mode="determinate")
+        self.var.set(max(0, min(100, int(percent)))) 
+        self.pb.update_idletasks()
+
+
+class LogPanel(tk.Frame):
+    # ... (No changes to LogPanel structure, only theming via global THEMES)
+    def __init__(self, master, theme, labels, db_logger=None, tk_root=None, app_controller=None): 
+        super().__init__(master, bg=theme["BG"])
+        self.labels = labels
+        self.theme = theme
+        self.tk_root = tk_root
+        self.app_controller = app_controller 
+        
+        log_title_frame = tk.Frame(self, bg=theme["BG"])
+        log_title_frame.pack(fill=tk.X, padx=6, pady=(8,2))
+        tk.Label(log_title_frame, text=labels["log"], font=LABEL_FONT, bg=theme["BG"], fg=theme.get("FG", "#D1D9E0")).pack(side=tk.LEFT)
+
+        self.text = tk.Text(self, height=25, font=LOG_FONT, state=tk.DISABLED,
+                            bg=theme["LOG_BG"], fg=theme["LOG_FG_INFO"],
+                            bd=1, relief="sunken", wrap=tk.WORD,
+                            selectbackground=theme["ACCENT"], selectforeground=theme["BTN_FG"],
+                            insertbackground=theme["FG"])
+        self.text.pack(fill=tk.BOTH, expand=True, padx=6, pady=(0,6))
+        TextContextMenu(self.text, self.tk_root, self.labels) 
+
+        for tag_name, color_key in [("info", "LOG_FG_INFO"), ("success", "LOG_FG_SUCCESS"), 
+                                    ("error", "LOG_FG_ERROR"), ("fail", "LOG_FG_FAIL"), 
+                                    ("cmd", "LOG_FG_CMD"), ("warning", "LOG_FG_WARNING"),
+                                    ("device_info_label", "FG"), 
+                                    ("device_info_value", "ACCENT")]: 
+            
+            font_config = LOG_FONT
+            if tag_name in ["success", "error", "fail"]:
+                font_config = (LOG_FONT[0], LOG_FONT[1], "bold")
+            if tag_name == "fail": 
+                font_config = (LOG_FONT[0], LOG_FONT[1], "bold") 
+            if tag_name == "device_info_label":
+                 font_config = (LOG_FONT[0], LOG_FONT[1], "bold")
+
+            self.text.tag_configure(tag_name, foreground=theme[color_key], font=font_config)
+        
+        self.db_logger = db_logger 
+        self.progress_bar = ProgressBarManager(self, theme)
+        self.progress_bar.pack(fill=tk.X, padx=6)
+        
+        controls_frame = tk.Frame(self, bg=theme["BG"])
+        controls_frame.pack(fill=tk.X, padx=6, pady=(6,10))
+        
+        self.cancel_button = ModernButton(controls_frame, labels.get("btn_cancel_operation", "Cancel Operation"),
+                                           command=self.app_controller.action_cancel_operation if self.app_controller else None, 
+                                           theme=theme, width=18, height=1, icon_path=None, state=tk.DISABLED) # Smaller cancel button
+        self.cancel_button.pack(side=tk.LEFT, padx=(0, 4)) 
+        if self.app_controller: 
+            self.app_controller.set_cancel_button_reference(self.cancel_button)
+
+    def clear_log(self):
+        if not self.winfo_exists(): return
+        def __clear():
+            if not self.text.winfo_exists(): return
+            self.text.config(state=tk.NORMAL)
+            self.text.delete("1.0", tk.END)
+            self.text.config(state=tk.DISABLED)
+        
+        if self.tk_root and hasattr(self.tk_root, 'after') and self.tk_root.winfo_exists():
+            if threading.current_thread() is not threading.main_thread():
+                self.tk_root.after(0, __clear)
+            else:
+                __clear()
+        else:
+            __clear()
+
+
+    def log(self, message, tag="info", indent=0, include_timestamp=False):
+        if not self.winfo_exists(): return
+        
+        def __log_to_widget():
+            if not self.text.winfo_exists(): return
+            self.text.config(state=tk.NORMAL)
+            
+            timestamp_prefix = f"[{datetime.now().strftime('%H:%M:%S')}] " if include_timestamp else ""
+            
+            prefix_map = {"cmd": "[CMD]", "success": "[OK]", "error": "[ERR]", "fail": "[FAIL]", "warning": "[WARN]", "info": "[INFO]"}
+            log_prefix_tag = prefix_map.get(tag, "[LOG]") 
+            
+            actual_log_prefix = ""
+            if not tag.startswith("device_info_") and tag != "connect_server_success_tag":
+                 actual_log_prefix = f"{log_prefix_tag} "
+
+            indent_space = "  " * indent 
+            
+            if message == self.labels.get("log_connect_server_success", "Connect to server...successful") and tag == "info":
+                 full_log_message = f"{indent_space}{message}\n"
+            else:
+                 full_log_message = f"{timestamp_prefix}{indent_space}{actual_log_prefix}{message}\n"
+
+            idx = self.text.index(tk.END + "-1c linestart") 
+            self.text.insert(tk.END, full_log_message)
+            self.text.tag_add(tag, idx, f"{idx} + {len(full_log_message)-1}c") 
+            
+            self.text.see(tk.END) 
+            self.text.config(state=tk.DISABLED)
+            
+            if self.db_logger: self.db_logger.add(message, tag)
+        
+        if self.tk_root and hasattr(self.tk_root, 'after') and self.tk_root.winfo_exists(): 
+            if threading.current_thread() is not threading.main_thread():
+                self.tk_root.after(0, __log_to_widget)
+            else:
+                __log_to_widget()
+        else: 
+             __log_to_widget()
+
+    def log_device_info_block(self, device_info_dict):
+        if not self.winfo_exists() or not self.text.winfo_exists(): return
+
+        self.text.config(state=tk.NORMAL)
+        
+        connect_msg = f"{self.labels.get('log_connect_server_success', 'Connect to server...successful')}\n"
+        idx_connect = self.text.index(tk.END + "-1c linestart")
+        self.text.insert(tk.END, connect_msg)
+        self.text.tag_add("info", idx_connect, f"{idx_connect} + {len(connect_msg)-1}c") 
+
+        max_label_len = 0
+        if device_info_dict:
+            present_labels = [label for label, prop_key in DEVICE_INFO_PROPERTIES if label in device_info_dict]
+            if present_labels:
+                max_label_len = max(len(label) for label in present_labels) + 1 
+
+        for label_text, prop_key in DEVICE_INFO_PROPERTIES:
+            value_text_original = device_info_dict.get(label_text, "N/A") 
+            value_text_display = value_text_original
+            value_tag = "device_info_value" 
+
+            if label_text == "Root State":
+                if value_text_original == "1": value_text_display = "No Root!"
+                elif value_text_original == "0": value_text_display = "Rooted!"
+                else: value_text_display = "Unknown"
+                
+                if "No Root!" in value_text_display: value_tag = "fail"
+                elif "Rooted!" in value_text_display: value_tag = "success"
+
+            formatted_label = f"{label_text}:".ljust(max_label_len if max_label_len > 0 else len(label_text) + 2) 
+            line_content = f"  {formatted_label} {value_text_display}\n" 
+
+            line_start_idx = self.text.index(tk.END + "-1c linestart")
+            self.text.insert(tk.END, line_content)
+            
+            label_part_start = self.text.index(f"{line_start_idx} + 2c") 
+            label_part_end = self.text.index(f"{label_part_start} + {len(formatted_label)}c")
+            self.text.tag_add("device_info_label", label_part_start, label_part_end)
+            
+            value_part_start = self.text.index(f"{label_part_end} + 1c") 
+            value_part_end = self.text.index(f"{value_part_start} + {len(value_text_display)}c")
+            self.text.tag_add(value_tag, value_part_start, value_part_end)
+            
+        if self.text.winfo_exists():
+            self.text.see(tk.END)
+            self.text.config(state=tk.DISABLED)
+
+
+class StatusBar(tk.Label):
+    # ... (No changes to StatusBar)
+    def __init__(self, master, theme, labels):
+        super().__init__(master, anchor="w", font=("Segoe UI", 10),
+                         bg=theme.get("STATUS_BAR_BG", theme["BG"]),
+                         fg=theme.get("STATUS_BAR_FG", theme["ACCENT"]),
+                         padx=10, pady=4)
+        self.theme = theme
+        self.labels = labels
+        self._check_adb_after_id = None
+        self.set_status(self.labels["adb_status_not_connected"], theme.get("LOG_FG_ERROR", "#F44336"))
+        self._check_adb()
+
+    def set_status(self, text, color):
+        if self.winfo_exists(): self.config(text=text, fg=color)
+
+    def _check_adb(self):
+        def check_thread_func():
+            stat = self.labels["adb_status_not_connected"]
+            color = self.theme.get("LOG_FG_ERROR", "#F44336")
+            try:
+                flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+                out = subprocess.check_output(['adb', 'get-state'], stderr=subprocess.STDOUT, text=True, timeout=2, creationflags=flags)
+                if "device" in out:
+                    stat = self.labels["adb_status_connected"]
+                    color = self.theme.get("LOG_FG_SUCCESS", "#4CAF50")
+            except Exception: pass 
+            
+            if self.winfo_exists() and self.master.winfo_exists(): 
+                 self.master.after(0, lambda s=stat, c=color: self.set_status(s, c))
+            
+            if self.winfo_exists():
+                 self._check_adb_after_id = self.after(5000, self._check_adb)
+
+        threading.Thread(target=check_thread_func, daemon=True).start()
+
+    def cancel_adb_check(self):
+        if self._check_adb_after_id:
+            self.after_cancel(self._check_adb_after_id)
+            self._check_adb_after_id = None
+
+
+class LoginWindow(tk.Toplevel):
+    def __init__(self, parent, app_controller):
+        super().__init__(parent)
+        self.parent = parent
+        self.app_controller = app_controller
+        self.labels = app_controller.labels
+        self.theme = app_controller.theme # Use the main app's theme for consistency
+        
+        self.login_theme_colors = self.theme # Use professional_dark by default
+        
+        self.title(self.labels.get("login_title", "Ultimat-Unlock Tool Login"))
+        self.geometry("400x480") # Adjusted size for new layout
+        self.resizable(False, False)
+        self.configure(bg=self.login_theme_colors.get("LOGIN_BG", "#1C1E26"))
+        self.protocol("WM_DELETE_WINDOW", self._on_closing_login)
+
+        # Load app icon for login window
+        if app_images.get('app_icon'):
+            self.iconphoto(True, app_images['app_icon'])
+
+        # Load banner image (same as before, or a new one if desired for login)
+        app_images['login_banner_display'] = load_image("login_banner.png", size=(360, 90)) 
+
+        parent_x = self.parent.winfo_x()
+        parent_y = self.parent.winfo_y()
+        parent_width = self.parent.winfo_width()
+        parent_height = self.parent.winfo_height()
+        
+        x = parent_x + (parent_width // 2) - (400 // 2)
+        y = parent_y + (parent_height // 2) - (480 // 2)
+        self.geometry(f"+{x}+{y}")
+
+        # Main frame for content
+        main_frame = tk.Frame(self, bg=self.login_theme_colors.get("LOGIN_BG", "#1C1E26"), padx=30, pady=20)
+        main_frame.pack(expand=True, fill=tk.BOTH)
+        
+        # App Logo and Title at the top of Login
+        header_frame = tk.Frame(main_frame, bg=self.login_theme_colors.get("LOGIN_BG", "#1C1E26"))
+        header_frame.pack(pady=(10, 20))
+        
+        if app_images.get('title_logo'): # Using the same title_logo as main app, resized
+            login_logo_resized = load_image("logo.png", size=(50,50))
+            if login_logo_resized:
+                app_images['login_window_logo'] = login_logo_resized
+                logo_label = tk.Label(header_frame, image=app_images['login_window_logo'], bg=self.login_theme_colors.get("LOGIN_BG", "#1C1E26"))
+                logo_label.pack(pady=(0,5))
+
+        tk.Label(header_frame, text=self.labels.get("title"), font=LOGIN_TITLE_FONT, 
+                 bg=self.login_theme_colors.get("LOGIN_BG", "#1C1E26"), 
+                 fg=self.login_theme_colors.get("LOGIN_FG", "#EAEAEA")).pack()
+
+
+        # Banner (if it exists)
+        if app_images.get('login_banner_display'):
+            banner_label = tk.Label(main_frame, image=app_images['login_banner_display'], 
+                                    bg=self.login_theme_colors.get("LOGIN_BG", "#1C1E26"), cursor="hand2")
+            banner_label.image = app_images['login_banner_display'] 
+            banner_label.pack(pady=(0,20))
+            banner_label.bind("<Button-1>", lambda e: webbrowser.open("http://ultimat-unlock.com"))
+
+        # Username
+        tk.Label(main_frame, text=self.labels.get("username_label", "Username:"), font=LOGIN_ENTRY_FONT, 
+                 bg=self.login_theme_colors.get("LOGIN_BG", "#1C1E26"), fg=self.login_theme_colors.get("LOGIN_FG", "#EAEAEA")).pack(anchor=tk.W, padx=5)
+        self.username_entry = tk.Entry(main_frame, font=LOGIN_ENTRY_FONT, width=35, 
+                                       bg=self.login_theme_colors.get("LOGIN_ENTRY_BG", "#2A2D35"), 
+                                       fg=self.login_theme_colors.get("LOGIN_FG", "#EAEAEA"), 
+                                       insertbackground=self.login_theme_colors.get("LOGIN_FG", "#EAEAEA"),
+                                       relief="flat", bd=2, highlightthickness=1, 
+                                       highlightbackground=self.login_theme_colors.get("ACCENT2", DARK_BLUE_ACCENT2))
+        self.username_entry.pack(pady=(2,10), ipady=5)
+        TextContextMenu(self.username_entry, self, self.labels) 
+
+        # Password
+        tk.Label(main_frame, text=self.labels.get("password_label", "Password:"), font=LOGIN_ENTRY_FONT, 
+                 bg=self.login_theme_colors.get("LOGIN_BG", "#1C1E26"), fg=self.login_theme_colors.get("LOGIN_FG", "#EAEAEA")).pack(anchor=tk.W, padx=5)
+        self.password_entry = tk.Entry(main_frame, font=LOGIN_ENTRY_FONT, width=35, show="*", 
+                                       bg=self.login_theme_colors.get("LOGIN_ENTRY_BG", "#2A2D35"), 
+                                       fg=self.login_theme_colors.get("LOGIN_FG", "#EAEAEA"), 
+                                       insertbackground=self.login_theme_colors.get("LOGIN_FG", "#EAEAEA"),
+                                       relief="flat", bd=2, highlightthickness=1,
+                                       highlightbackground=self.login_theme_colors.get("ACCENT2", DARK_BLUE_ACCENT2))
+        self.password_entry.pack(pady=(2,20), ipady=5)
+        self.password_entry.bind("<Return>", self._attempt_login) 
+        TextContextMenu(self.password_entry, self, self.labels) 
+
+        # Login Button
+        ModernButton(main_frame, text=self.labels.get("login_button", "Login"), 
+                     command=self._attempt_login, theme=self.theme, width=18, height=1, pady=5).pack(pady=(0,10))
+        
+        self.grab_set() 
+        self.focus_set() 
+        self.username_entry.focus() 
+
+    def _attempt_login(self, event=None): 
+        username = self.username_entry.get()
+        password = self.password_entry.get()
+
+        if username == FIXED_USERNAME and password == FIXED_PASSWORD:
+            log_to_file_debug_globally("Login successful.")
+            self.destroy() 
+            self.app_controller.show_main_app() 
+        else:
+            log_to_file_debug_globally("Login failed.")
+            messagebox.showerror(self.labels.get("login_failed_title", "Login Failed"),
+                                 self.labels.get("login_failed_message", "Invalid username or password."),
+                                 parent=self) 
+            self.password_entry.delete(0, tk.END) 
+            self.username_entry.focus() 
+
+    def _on_closing_login(self):
+        log_to_file_debug_globally("Login window closed by user. Exiting application.")
+        self.parent.destroy() 
+
+
+# ... (Rest of the classes: AppController, UltimateDeviceTool, Tabs, AppBrowserWindow)
+# The full code will be provided in one block.
+# This requires careful integration of all changes.
+# The following is the continuation and completion of the script.
+
+
+class AppBrowserWindow(tk.Toplevel):
+    def __init__(self, parent, master_app_controller):
+        super().__init__(parent)
+        self.master_app_controller = master_app_controller
+        self.labels = master_app_controller.labels
+        self.theme = master_app_controller.theme
+
+        self.title(self.labels.get("app_browser_title", "Application Browser"))
+        self.geometry("600x400")
+        self.configure(bg=self.theme["BG"])
+        self.grab_set() # Modal behavior
+
+        # Header
+        header_frame = tk.Frame(self, bg=self.theme["BG"])
+        header_frame.pack(pady=10, fill=tk.X, padx=10)
+        tk.Label(header_frame, text=self.labels.get("app_browser_title"), font=APP_LOGO_TITLE_FONT, 
+                 bg=self.theme["BG"], fg=self.theme["TITLE_FG"]).pack(side=tk.LEFT)
+        
+        refresh_button = ModernButton(header_frame, text=self.labels.get("app_browser_refresh_list", "Refresh"),
+                                      command=self.refresh_app_list, theme=self.theme, width=12, height=1)
+        refresh_button.pack(side=tk.RIGHT)
+
+        # Treeview for apps
+        self.tree_frame = tk.Frame(self, bg=self.theme["BG"])
+        self.tree_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0,10))
+
+        columns = ("package_name", "apk_path")
+        self.app_tree = ttk.Treeview(self.tree_frame, columns=columns, show="headings", selectmode="browse")
+        
+        self.app_tree.heading("package_name", text=self.labels.get("app_browser_package_name", "Package Name"))
+        self.app_tree.heading("apk_path", text=self.labels.get("app_browser_apk_path", "APK Path"))
+        
+        self.app_tree.column("package_name", width=250, anchor=tk.W)
+        self.app_tree.column("apk_path", width=300, anchor=tk.W)
+
+        vsb = ttk.Scrollbar(self.tree_frame, orient="vertical", command=self.app_tree.yview)
+        hsb = ttk.Scrollbar(self.tree_frame, orient="horizontal", command=self.app_tree.xview)
+        self.app_tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        hsb.pack(side=tk.BOTTOM, fill=tk.X)
+        self.app_tree.pack(fill=tk.BOTH, expand=True)
+        
+        # Style Treeview
+        style = ttk.Style(self)
+        style.configure("Treeview", background=self.theme["LOG_BG"], foreground=self.theme["FG"], 
+                        fieldbackground=self.theme["LOG_BG"], rowheight=25)
+        style.configure("Treeview.Heading", background=self.theme["ACCENT"], foreground=self.theme["BTN_FG"],
+                        font=BTN_FONT, relief="flat")
+        style.map("Treeview.Heading", background=[('active', self.theme["ACCENT2"])])
+
+
+        self.refresh_app_list() # Initial load
+
+    def refresh_app_list(self):
+        # Clear existing items
+        for i in self.app_tree.get_children():
+            self.app_tree.delete(i)
+
+        # TODO: Implement ADB command to fetch app list and parse it
+        # Example: adb shell pm list packages -f -3 (for third-party apps with path)
+        # For now, add placeholder or message
+        
+        # Placeholder:
+        # self.app_tree.insert("", tk.END, values=("com.example.app1", "/data/app/com.example.app1-xxxx/base.apk"))
+        # self.app_tree.insert("", tk.END, values=("com.example.app2", "/data/app/com.example.app2-yyyy/base.apk"))
+        
+        # If no apps or error:
+        placeholder_message = self.labels.get("app_browser_no_apps", "No apps found or error.")
+        self.app_tree.insert("", tk.END, values=(placeholder_message, ""), tags=("placeholder",))
+        self.app_tree.tag_configure("placeholder", foreground="gray")
+
+        log_to_file_debug_globally("App browser list refreshed (placeholder).", "INFO")
+
+
+class AppController:
+    # ... (AppController as defined before, with minor adjustments if any)
+    def __init__(self):
+        log_to_file_debug_globally("AppController __init__ started.")
+        self.root = tk.Tk()
+        
+        app_images['app_icon'] = load_image("logo.png") 
+        if app_images.get('app_icon'):
+            self.root.iconphoto(True, app_images['app_icon'])
+        else: 
+            try: 
+                 self.root.iconbitmap("logo.ico") 
+            except Exception:
+                 log_to_file_debug_globally("Failed to set window icon from logo.png or logo.ico.", "WARNING")
+
+
+        self.root.withdraw() 
+
+        self.lang = "ar" # Default to Arabic as per user context
+        self.theme_mode = "professional_dark" 
+        self.labels = get_labels(self.lang)
+        self.theme = get_theme(self.theme_mode)
+        
+        self.main_app_window = None 
+        self.cancel_button_ref = None 
+
+        app_images['telegram_icon'] = load_image("telegram_icon.png", size=(16,16)) # Adjusted size for smaller buttons
+        app_images['title_logo'] = load_image("logo.png", size=(42, 42)) # Main app title logo
+
+        try:
+            # webbrowser.open("https://ultimat-unlock.com/") # Commented out to prevent opening on every debug run
+            log_to_file_debug_globally("Website auto-open skipped for this run.")
+        except Exception as e_web:
+            log_to_file_debug_globally(f"Failed to open website: {e_web}", "WARNING")
+
+        self.login_window = LoginWindow(self.root, self) 
+        log_to_file_debug_globally("LoginWindow instantiated.")
+
+    def start(self):
+        log_to_file_debug_globally("AppController start, entering root.mainloop().")
+        self.root.mainloop()
+
+    def show_main_app(self):
+        log_to_file_debug_globally("show_main_app called.")
+        self.root.deiconify() 
+        if self.main_app_window is None:
+            self.main_app_window = UltimateDeviceTool(master_tk_instance=self.root, app_controller=self)
+            log_to_file_debug_globally("UltimateDeviceTool instantiated as main_app_window.")
+        else: 
+            log_to_file_debug_globally("Main app window already exists, deiconifying.", "WARNING")
+            if isinstance(self.main_app_window, UltimateDeviceTool) and self.main_app_window.winfo_exists():
+                 self.main_app_window.master.deiconify() 
+            else: 
+                 self.main_app_window = UltimateDeviceTool(master_tk_instance=self.root, app_controller=self)
+    
+    def set_cancel_button_reference(self, button_widget):
+        self.cancel_button_ref = button_widget
+
+    def action_cancel_operation(self):
+        if self.main_app_window: 
+            self.main_app_window.action_cancel_operation()
+        else:
+            log_to_file_debug_globally("Cancel action called but main_app_window not available.", "WARNING")
+
+
+class UltimateDeviceTool(tk.Frame):
+    # ... (UltimateDeviceTool with UI changes)
+    def __init__(self, master_tk_instance, app_controller):
+        log_to_file_debug_globally("UltimateDeviceTool __init__ started.")
+        super().__init__(master_tk_instance)
+        
+        self.master = master_tk_instance
+        self.app_controller = app_controller 
+
+        self.lang = self.app_controller.lang
+        self.theme_mode = self.app_controller.theme_mode
+        self.labels = get_labels(self.lang)
+        self.theme = get_theme(self.theme_mode)
+
+        # app_images['title_logo'] is loaded in AppController
+
+        self.db_logger = DBLogger(tk_root=self.master) 
+        log_to_file_debug_globally("Instance variables (lang, theme, db_logger) initialized.")
+        
+        self.master.title(self.labels["title"])
+        self.master.geometry("1200x760") # Slightly adjusted default size
+        self.master.wm_minsize(980, 680) 
+        self.master.protocol("WM_DELETE_WINDOW", self._on_closing) 
+        log_to_file_debug_globally("Window properties (title, geometry, minsize, protocol) set on master.")
+        
+        self.pack(fill=tk.BOTH, expand=True) 
+
+        self._apply_styles()
+        self._build_ui()
+        self.command_queue = queue.Queue() 
+        self.current_popen_process = None 
+        self.after_id_process_command_queue = self.after(100, self._process_command_queue) 
+        log_to_file_debug_globally("UltimateDeviceTool __init__ finished successfully.")
+
+    def _apply_styles(self):
+        log_to_file_debug_globally("Applying styles...")
+        self.style = ttk.Style(self.master)
+        try:
+            self.style.theme_use('clam') 
+        except tk.TclError:
+            log_to_file_debug_globally("Clam theme not available. Default theme will be used.", "WARNING")
+        
+        self.style.configure("TNotebook", background=self.theme["BG"], borderwidth=0, tabmargins=[2, 5, 2, 0])
+        self.style.configure("TNotebook.Tab", 
+                             background=self.theme.get("NOTEBOOK_TAB_BG", self.theme["GROUP_BG"]),
+                             foreground=self.theme.get("NOTEBOOK_TAB_FG", self.theme["FG"]),
+                             padding=[10, 5], font=("Segoe UI", 9, "bold"), borderwidth=0, # Smaller tab font
+                             relief="flat") 
+        self.style.map("TNotebook.Tab",
+                       background=[("selected", self.theme.get("NOTEBOOK_TAB_SELECTED_BG", self.theme["ACCENT"])),
+                                   ("active", self.theme.get("NOTEBOOK_TAB_ACTIVE_BG", self.theme["ACCENT2"]))],
+                       foreground=[("selected", self.theme.get("NOTEBOOK_TAB_SELECTED_FG", self.theme["BTN_FG"]))],
+                       relief=[("selected", "flat")]) 
+        
+        self.style.configure("TPanedwindow", background=self.theme["BG"])
+        self.style.configure("TFrame", background=self.theme["BG"]) 
+        log_to_file_debug_globally("Styles applied.")
+
+    def _build_ui(self):
+        log_to_file_debug_globally("Building UI...")
+        self.config(bg=self.theme["BG"])
+
+        menubar = tk.Menu(self.master, bg=self.theme["BG"], fg=self.theme["FG"], relief=tk.FLAT, bd=0, activebackground=self.theme["ACCENT"], activeforeground=self.theme["BTN_FG"])
+        theme_menu = tk.Menu(menubar, tearoff=0, bg=self.theme["GROUP_BG"], fg=self.theme["FG"], relief=tk.FLAT, activebackground=self.theme["ACCENT"], activeforeground=self.theme["BTN_FG"])
+        theme_menu.add_command(label=self.labels["light"], command=lambda: self.set_theme("light"))
+        theme_menu.add_command(label=self.labels["dark"], command=lambda: self.set_theme("dark"))
+        theme_menu.add_command(label=self.labels["professional_dark"], command=lambda: self.set_theme("professional_dark"))
+        menubar.add_cascade(label=self.labels["theme"], menu=theme_menu)
+        
+        lang_menu = tk.Menu(menubar, tearoff=0, bg=self.theme["GROUP_BG"], fg=self.theme["FG"], relief=tk.FLAT, activebackground=self.theme["ACCENT"], activeforeground=self.theme["BTN_FG"])
+        lang_menu.add_command(label=LABELS["en"]["english"], command=lambda: self.set_language("en")) 
+        lang_menu.add_command(label=LABELS["ar"]["arabic"], command=lambda: self.set_language("ar"))
+        menubar.add_cascade(label=self.labels["lang"], menu=lang_menu)
+        self.master.config(menu=menubar)
+
+        self.status_bar = StatusBar(self, self.theme, self.labels)
+        
+        bottom_buttons_frame = tk.Frame(self, bg=self.theme["BG"])
+        
+        ModernButton(bottom_buttons_frame, text=self.labels.get("btn_telegram_channel", "Telegram Channel"), 
+                     command=lambda: webbrowser.open("https://t.me/UltimatUnlock1"), 
+                     theme=self.theme, width=17, height=1, icon_path="telegram_icon.png", icon_size=(16,16), padx=4, pady=2).pack(side=tk.LEFT, padx=(10,5), pady=2) 
+        ModernButton(bottom_buttons_frame, text=self.labels.get("btn_contact_support", "Contact Support"), 
+                     command=lambda: webbrowser.open("https://t.me/UltimatUnlock"), 
+                     theme=self.theme, width=17, height=1, icon_path="telegram_icon.png", icon_size=(16,16), padx=4, pady=2).pack(side=tk.LEFT, padx=5, pady=2)
+
+        self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
+        bottom_buttons_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(5,2), padx=0) 
+
+
+        body = ttk.PanedWindow(self, orient=tk.HORIZONTAL, style="TPanedwindow")
+        body.pack(fill=tk.BOTH, expand=True, padx=5, pady=5) 
+        
+        left_area_container = tk.Frame(body, bg=self.theme["BG"])
+        right_area_container = tk.Frame(body, bg=self.theme["BG"])
+        body.add(left_area_container, weight=2) 
+        body.add(right_area_container, weight=1) 
+
+        header_frame = tk.Frame(left_area_container, bg=self.theme["BG"])
+        header_frame.pack(fill=tk.X, pady=(10, 5), padx=(15,0))
+        
+        if app_images.get('title_logo'):
+            logo_label = tk.Label(header_frame, image=app_images['title_logo'], bg=self.theme["BG"])
+            logo_label.image = app_images['title_logo'] 
+            logo_label.pack(side=tk.LEFT, padx=(0,10), pady=0)
+
+        tk.Label(header_frame, text=self.labels["title"], font=APP_LOGO_TITLE_FONT, bg=self.theme["BG"], fg=self.theme.get("TITLE_FG", self.theme["ACCENT"]) ).pack(side=tk.LEFT, anchor=tk.W, pady=(0,0))
+        # Edition label removed
+        
+        self.device_status_panel = tk.LabelFrame(left_area_container, 
+                                            text=self.labels.get("device_status_panel_title", "Device Status"),
+                                            font=LABEL_FONT, 
+                                            bg=self.theme.get("DEVICE_STATUS_BG", self.theme["GROUP_BG"]),
+                                            fg=self.theme.get("DEVICE_STATUS_FG", self.theme["FG"]), 
+                                            padx=10, pady=8, relief="groove", bd=1) # Adjusted pady
+        self.device_status_panel.pack(fill=tk.X, padx=15, pady=(5,10))
+        self._build_device_status_widgets(self.device_status_panel)
+
+
+        self.notebook = ttk.Notebook(left_area_container, style="TNotebook")
+        self.notebook.pack(expand=True, fill=tk.BOTH, padx=15, pady=(0,15))
+        
+        try: 
+            self.log_panel = LogPanel(right_area_container, self.theme, self.labels, db_logger=self.db_logger, tk_root=self.master, app_controller=self.app_controller)
+            self.log_panel.pack(fill=tk.BOTH, expand=True, padx=(5,15), pady=(10,15)) # Adjusted pady
+            log_to_file_debug_globally("Log panel created.")
+        except Exception as e_log_panel:
+            log_to_file_debug_globally(f"Error creating LogPanel: {e_log_panel}", "CRITICAL")
+            traceback.print_exc(file=open(_DEBUG_LOG_PATH, "a")) 
+        
+        tabs_to_add = [
+            (SamsungTab, "tab_samsung"),
+            (HonorTab, "tab_honor"),
+            (XiaomiTab, "tab_xiaomi"),
+            (FileAdvancedTab, "tab_file_advanced")
+        ]
+        
+        for TabClass, label_key in tabs_to_add:
+            try:
+                tab_instance = TabClass(self.notebook, self) 
+                self.notebook.add(tab_instance, text=self.labels[label_key], padding=10)
+                log_to_file_debug_globally(f"{TabClass.__name__} added to notebook.")
+            except Exception as e_tab_creation:
+                log_to_file_debug_globally(f"Error creating or adding {TabClass.__name__}: {e_tab_creation}", "ERROR")
+                traceback.print_exc(file=open(_DEBUG_LOG_PATH, "a"))
+                messagebox.showerror("UI Build Error", f"Failed to build {self.labels[label_key]} tab: {e_tab_creation}", parent=self.master)
+
+        log_to_file_debug_globally("UI Building finished.")
+
+
+    def _build_device_status_widgets(self, parent_frame):
+        for widget in parent_frame.winfo_children():
+            widget.destroy()
+
+        status_grid = tk.Frame(parent_frame, bg=self.theme.get("DEVICE_STATUS_BG", self.theme["GROUP_BG"]))
+        status_grid.pack(fill=tk.X)
+        
+        # Configure columns for even spacing
+        status_grid.columnconfigure(0, weight=1) # Label column
+        status_grid.columnconfigure(1, weight=2) # Value column
+        status_grid.columnconfigure(2, weight=1) # Label column
+        status_grid.columnconfigure(3, weight=2) # Value column
+        status_grid.columnconfigure(4, weight=0) # Refresh button column (no extra space)
+
+
+        self.status_vars = {
+            "model": tk.StringVar(value=self.labels.get("status_unknown", "Unknown")),
+            "android": tk.StringVar(value=self.labels.get("status_unknown", "Unknown")),
+            "connection": tk.StringVar(value=self.labels.get("status_unknown", "Unknown")),
+            "root": tk.StringVar(value=self.labels.get("status_unknown", "Unknown"))
+        }
+
+        info_map_col1 = [
+            (self.labels.get("status_model", "Model:"), self.status_vars["model"]),
+            (self.labels.get("status_android", "Android:"), self.status_vars["android"]),
+        ]
+        info_map_col2 = [
+            (self.labels.get("status_connection", "Connection:"), self.status_vars["connection"]),
+            (self.labels.get("status_root", "Root:"), self.status_vars["root"])
+        ]
+
+        for i, (label_text, var) in enumerate(info_map_col1):
+            tk.Label(status_grid, text=label_text, font=DEVICE_STATUS_FONT_LABEL, 
+                     bg=self.theme.get("DEVICE_STATUS_BG"), fg=self.theme.get("DEVICE_STATUS_FG"), anchor="w").grid(row=i, column=0, sticky=tk.W, padx=(0,2))
+            tk.Label(status_grid, textvariable=var, font=DEVICE_STATUS_FONT_VALUE, 
+                     bg=self.theme.get("DEVICE_STATUS_BG"), fg=self.theme.get("ACCENT"), anchor="w").grid(row=i, column=1, sticky=tk.W, padx=(0,10))
+
+        for i, (label_text, var) in enumerate(info_map_col2):
+            tk.Label(status_grid, text=label_text, font=DEVICE_STATUS_FONT_LABEL, 
+                     bg=self.theme.get("DEVICE_STATUS_BG"), fg=self.theme.get("DEVICE_STATUS_FG"), anchor="w").grid(row=i, column=2, sticky=tk.W, padx=(10,2))
+            tk.Label(status_grid, textvariable=var, font=DEVICE_STATUS_FONT_VALUE, 
+                     bg=self.theme.get("DEVICE_STATUS_BG"), fg=self.theme.get("ACCENT"), anchor="w").grid(row=i, column=3, sticky=tk.W)
+        
+        refresh_btn = ModernButton(status_grid, text=self.labels.get("btn_refresh_status", "Refresh"), 
+                                   command=self.action_refresh_device_status, 
+                                   theme=self.theme, width=10, height=1, padx=3, pady=1) 
+        refresh_btn.grid(row=0, column=4, rowspan=2, sticky=tk.E, padx=(15,0))
+        
+        self.action_refresh_device_status(initial_load=True)
+
+
+    def action_refresh_device_status(self, initial_load=False):
+        if not initial_load and hasattr(self, 'log_panel') and self.log_panel and self.log_panel.winfo_exists():
+            self.log_panel.log("Refreshing device status panel...", "info", include_timestamp=False)
+        
+        def update_from_adb_status():
+            if not self.winfo_exists(): return # Check if UltimateDeviceTool still exists
+
+            adb_full_status_text = ""
+            if hasattr(self, 'status_bar') and self.status_bar.winfo_exists():
+                 adb_full_status_text = self.status_bar.cget("text") 
+            
+            conn_status_text = self.labels.get("status_unknown", "Unknown")
+            if self.labels.get("adb_status_connected") in adb_full_status_text:
+                conn_status_text = "ADB Connected"
+            elif self.labels.get("adb_status_not_connected") in adb_full_status_text:
+                conn_status_text = "Not Connected"
+            
+            if hasattr(self, 'status_vars') and "connection" in self.status_vars:
+                 self.status_vars["connection"].set(conn_status_text)
+
+            # For a full refresh, trigger the detailed info fetch
+            if not initial_load:
+                self.fetch_and_log_device_info( # This will update status vars via its callback
+                    operation_label_key_on_success="log_read_info_complete", # Not strictly needed for status panel
+                    next_operation_name=self.labels.get("btn_refresh_status") # Log this as the operation
+                )
+            elif initial_load and conn_status_text == "ADB Connected":
+                 # On initial load, if ADB is connected, try a silent refresh of full info
+                 # This is a simplified call, a dedicated lightweight fetch would be better
+                 self.get_detailed_adb_info_props(callback_after_all_props=self._update_status_panel_from_props)
+
+
+        if self.winfo_exists():
+            self.after(100, update_from_adb_status)
+
+    def _update_status_panel_from_props(self, props_dict_internal_keys):
+        """Callback specifically to update status panel from get_detailed_adb_info_props."""
+        if not self.winfo_exists() or not hasattr(self, 'status_vars'): return
+
+        # Map internal keys to display labels used in DEVICE_INFO_PROPERTIES
+        # and then to status_vars keys
+        model_val = props_dict_internal_keys.get("ro.product.model", self.labels.get("status_unknown"))
+        android_val = props_dict_internal_keys.get("ro.build.version.release", self.labels.get("status_unknown"))
+        root_prop_val = props_dict_internal_keys.get("ro.secure", "N/A")
+
+        self.status_vars["model"].set(model_val)
+        self.status_vars["android"].set(android_val)
+
+        if root_prop_val == "0": self.status_vars["root"].set("Rooted!")
+        elif root_prop_val == "1": self.status_vars["root"].set("No Root!")
+        else: self.status_vars["root"].set(self.labels.get("status_unknown"))
+
+
+    def _update_cancel_button_state(self, enable=False):
+        # ... (Same as before)
+        if self.app_controller and self.app_controller.cancel_button_ref:
+            button = self.app_controller.cancel_button_ref
+            if button.winfo_exists(): 
+                 button.config(state=tk.NORMAL if enable else tk.DISABLED)
+                 if not enable:
+                     button.config(bg=self.theme.get("GROUP_BG", "#2C313A"), fg=self.theme.get("NOTEBOOK_TAB_FG", "#AAB8C5"))
+                 else:
+                     button.config(bg=self.theme["BTN_BG"], fg=self.theme["BTN_FG"])
+
+
+    def execute_command_async(self, command_list, operation_name="Operation", callback_on_finish=None, is_part_of_sequence=False, is_info_gathering=False):
+        # ... (Same as before)
+        log_panel_available = hasattr(self, 'log_panel') and self.log_panel is not None and self.log_panel.winfo_exists()
+        
+        if log_panel_available and not is_part_of_sequence and not is_info_gathering: 
+            self.log_panel.clear_log() 
+            self.log_panel.log(self.labels.get("log_operation_started", "Operation Started: ") + operation_name, "info", include_timestamp=True)
+            self.log_panel.progress_bar.start()
+            self._update_cancel_button_state(enable=True)
+        
+        command_str_for_debug = " ".join(map(str,command_list)) if isinstance(command_list, list) else str(command_list)
+        if not is_info_gathering: 
+            log_to_file_debug_globally(f"Executing ASYNC ({operation_name}): {command_str_for_debug}", "DEBUG_CMD") 
+
+        def _command_thread():
+            process = None 
+            try:
+                startupinfo = None
+                if os.name == 'nt':
+                    startupinfo = subprocess.STARTUPINFO()
+                    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                    startupinfo.wShowWindow = subprocess.SW_HIDE
+
+                process = subprocess.Popen(command_list, stdout=subprocess.PIPE, stderr=subprocess.PIPE, 
+                                           text=True, encoding='utf-8', errors='replace', 
+                                           startupinfo=startupinfo, 
+                                           creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+                self.current_popen_process = process
+                stdout, stderr = process.communicate(timeout=120) 
+                return_code = process.returncode
+                result_data = {"stdout": stdout, "stderr": stderr, "return_code": return_code, 
+                               "operation_name": operation_name, "command": command_list, 
+                               "callback": callback_on_finish, "is_part_of_sequence": is_part_of_sequence,
+                               "is_info_gathering": is_info_gathering}
+                self.command_queue.put(result_data)
+            except subprocess.TimeoutExpired:
+                if process: process.kill() 
+                log_to_file_debug_globally(f"Timeout for {operation_name}: {command_str_for_debug}", "ERROR")
+                self.command_queue.put({"error": "TimeoutExpired", "operation_name": operation_name, "command": command_list, "callback": callback_on_finish, "is_part_of_sequence": is_part_of_sequence, "is_info_gathering": is_info_gathering})
+            except FileNotFoundError:
+                log_to_file_debug_globally(f"FileNotFound for {operation_name}: {command_list[0]}", "ERROR")
+                self.command_queue.put({"error": "FileNotFound", "command_name": command_list[0], "operation_name": operation_name, "command": command_list, "callback": callback_on_finish, "is_part_of_sequence": is_part_of_sequence, "is_info_gathering": is_info_gathering})
+            except Exception as e: 
+                if process and process.returncode is not None and process.returncode < 0 : 
+                     self.command_queue.put({"error": "Cancelled", "operation_name": operation_name, "command": command_list, "callback": callback_on_finish, "is_part_of_sequence": is_part_of_sequence, "is_info_gathering": is_info_gathering})
+                else:
+                     log_to_file_debug_globally(f"Exception for {operation_name} ({command_str_for_debug}): {e}", "ERROR")
+                     traceback.print_exc(file=open(_DEBUG_LOG_PATH, "a"))
+                     self.command_queue.put({"error": str(e), "operation_name": operation_name, "command": command_list, "callback": callback_on_finish, "is_part_of_sequence": is_part_of_sequence, "is_info_gathering": is_info_gathering})
+            finally:
+                self.current_popen_process = None 
+        
+        threading.Thread(target=_command_thread, daemon=True).start()
+
+    def _process_command_queue(self):
+        # ... (Same as before)
+        try:
+            while not self.command_queue.empty():
+                result = self.command_queue.get_nowait()
+                self._handle_command_result(result)
+        except Exception as e: 
+            log_to_file_debug_globally(f"Error in _process_command_queue: {e}", "ERROR")
+            traceback.print_exc(file=open(_DEBUG_LOG_PATH, "a"))
+        finally:
+            if self.winfo_exists(): 
+                self.after_id_process_command_queue = self.after(100, self._process_command_queue)
+
+
+    def _handle_command_result(self, result):
+        # ... (Same as before)
+        log_panel_available = hasattr(self, 'log_panel') and self.log_panel is not None and self.log_panel.winfo_exists()
+        log_method = self.log_panel.log if log_panel_available else log_to_file_debug_globally
+        
+        operation_name = result.get("operation_name", "Unknown Operation")
+        is_part_of_sequence = result.get("is_part_of_sequence", False)
+        is_info_gathering = result.get("is_info_gathering", False)
+
+        if is_info_gathering and "error" not in result and result.get("return_code") == 0:
+            pass 
+        elif is_part_of_sequence:
+            if "error" in result:
+                log_method(f"Step Error ({operation_name}): {result['error']}", "error", indent=1, include_timestamp=False)
+            elif result.get("return_code", -1) != 0:
+                stderr = result.get("stderr", "").strip()
+                stdout = result.get("stdout", "").strip()
+                details = stderr if stderr else stdout
+                if details: log_method(f"Step Failed: {details.splitlines()[0] if details else ''}", "error", indent=1, include_timestamp=False)
+                else: log_method(f"Step Failed ({operation_name})", "fail", indent=1, include_timestamp=False)
+            else: 
+                stdout = result.get("stdout", "").strip()
+                if stdout and not any(kw in stdout.lower() for kw in ["success", "already", "performed", "daemon started successfully", ""]):
+                     log_method(f"{stdout.splitlines()[0]}", "info", indent=1, include_timestamp=False)
+        else: 
+            if "error" in result:
+                error_type = result["error"]
+                error_message_summary = ""
+                if error_type == "TimeoutExpired": error_message_summary = "Operation timed out"
+                elif error_type == "FileNotFound": error_message_summary = f"Command '{result.get('command_name', 'N/A')}' not found"
+                elif error_type == "Cancelled": error_message_summary = "Operation cancelled by user"
+                else: error_message_summary = f"Error - {error_type}"
+                log_method(f"{operation_name}: {error_message_summary}", "error", include_timestamp=True)
+            else: 
+                stdout = result.get("stdout", "")
+                stderr = result.get("stderr", "")
+                return_code = result.get("return_code", -1)
+                
+                if not operation_name.startswith("Get Property"): 
+                    if return_code == 0:
+                        log_method(f"{operation_name}: Completed successfully.", "success", include_timestamp=True)
+                        if stdout.strip() and not any(kw in stdout.lower() for kw in ["success", "already", "performed", "daemon started successfully"]):
+                            summary_stdout = stdout.strip().splitlines()[0]
+                            if len(summary_stdout) > 100: summary_stdout = summary_stdout[:100] + "..."
+                            log_method(f"Detail: {summary_stdout}", "info", indent=1, include_timestamp=False)
+                        elif stderr.strip(): 
+                            summary_stderr = stderr.strip().splitlines()[0]
+                            if len(summary_stderr) > 100: summary_stderr = summary_stderr[:100] + "..."
+                            log_method(f"Warning: {summary_stderr}", "warning", indent=1, include_timestamp=False)
+                    else: 
+                        log_method(f"{operation_name}: Failed (Code: {return_code}).", "fail", include_timestamp=True)
+                        details = stderr.strip() if stderr.strip() else stdout.strip()
+                        if details:
+                            summary_details = details.splitlines()[0]
+                            if len(summary_details) > 120: summary_details = summary_details[:120] + "..."
+                            log_method(f"Error Details: {summary_details}", "error", indent=1, include_timestamp=False)
+        
+        if log_panel_available and not is_part_of_sequence and not is_info_gathering:
+            self.log_panel.progress_bar.stop()
+            self._update_cancel_button_state(enable=False)
+        
+        callback = result.get("callback")
+        if callback and callable(callback):
+            try:
+                callback(result)
+            except Exception as e_callback:
+                log_to_file_debug_globally(f"Error in command callback for {operation_name}: {e_callback}", "ERROR")
+                traceback.print_exc(file=open(_DEBUG_LOG_PATH, "a"))
+
+
+    def action_cancel_operation(self):
+        # ... (Same as before)
+        if self.current_popen_process and self.current_popen_process.poll() is None: 
+            try:
+                self.current_popen_process.terminate() 
+                if hasattr(self, 'log_panel') and self.log_panel and self.log_panel.winfo_exists():
+                    self.log_panel.log("Attempting to cancel current operation...", "warning", include_timestamp=False) 
+                else:
+                    log_to_file_debug_globally("Attempting to cancel current operation... (no log panel)", "WARNING")
+            except Exception as e:
+                log_msg = f"Error during cancellation: {e}"
+                if hasattr(self, 'log_panel') and self.log_panel and self.log_panel.winfo_exists():
+                    self.log_panel.log(log_msg, "error", include_timestamp=True)
+                else:
+                    log_to_file_debug_globally(log_msg, "ERROR")
+        else:
+            log_msg = "No operation currently running to cancel."
+            if hasattr(self, 'log_panel') and self.log_panel and self.log_panel.winfo_exists():
+                self.log_panel.log(log_msg, "info", include_timestamp=False)
+            else:
+                log_to_file_debug_globally(log_msg, "INFO")
+            self._update_cancel_button_state(enable=False) 
+
+    def fetch_and_log_device_info(self, operation_label_key_on_success, callback_after_info_and_op=None, next_operation_command=None, next_operation_name=""):
+        # ... (fetch_and_log_device_info now updates status_vars in its callback)
+        log_panel_available = hasattr(self, 'log_panel') and self.log_panel is not None and self.log_panel.winfo_exists()
+        
+        current_main_op_name = next_operation_name if next_operation_command else self.labels.get("btn_get_detailed_info", "Read Device Info (ADB)")
+
+        if log_panel_available:
+            self.log_panel.clear_log()
+            self.log_panel.log(self.labels.get("log_operation_started", "Operation Started: ") + current_main_op_name, "info", include_timestamp=True)
+            self.log_panel.progress_bar.start()
+            self._update_cancel_button_state(enable=True)
+        
+        collected_props_display_keys = {}
+        
+        def _after_all_props_fetched_for_operation(final_props_dict_internal_keys):
+            nonlocal collected_props_display_keys
+            temp_display_dict = {}
+            for display_label, internal_key in DEVICE_INFO_PROPERTIES:
+                temp_display_dict[display_label] = final_props_dict_internal_keys.get(internal_key, "N/A")
+            collected_props_display_keys = temp_display_dict
+            
+            # Update the device status panel with this new info
+            self._update_status_panel_from_props(final_props_dict_internal_keys)
+
+
+            if log_panel_available:
+                self.log_panel.log_device_info_block(collected_props_display_keys) 
+
+            if next_operation_command: 
+                if log_panel_available:
+                     self.log_panel.log(self.labels.get("log_operation_started", "Operation Started: ") + next_operation_name, "info", indent=1, include_timestamp=True)
+
+                self.execute_command_async( 
+                    next_operation_command,
+                    operation_name=next_operation_name,
+                    callback_on_finish=_after_next_operation_completed,
+                    is_part_of_sequence=False 
+                )
+            else: 
+                if log_panel_available:
+                    self.log_panel.log(self.labels.get(operation_label_key_on_success, "Operation successful."), "success", include_timestamp=True)
+                    self.log_panel.progress_bar.stop() 
+                    self._update_cancel_button_state(enable=False) 
+                if callback_after_info_and_op:
+                    callback_after_info_and_op({"return_code": 0, "device_info": collected_props_display_keys})
+        
+        def _after_next_operation_completed(result):
+            if log_panel_available:
+                pass 
+            
+            if callback_after_info_and_op:
+                callback_after_info_and_op({"return_code": result.get("return_code", -1), 
+                                            "device_info": collected_props_display_keys, 
+                                            "operation_result": result})
+
+        self.get_detailed_adb_info_props(callback_after_all_props=_after_all_props_fetched_for_operation)
+
+
+    def get_detailed_adb_info_props(self, callback_after_all_props=None):
+        # ... (Same as before)
+        collected_props_internal_keys = {} 
+        remaining_props_count = len(DEVICE_INFO_PROPERTIES)
+
+        def _after_single_prop_fetch(result_single_prop):
+            nonlocal remaining_props_count 
+            prop_key_fetched = "unknown_prop"
+            if result_single_prop.get("command") and len(result_single_prop["command"]) > 3:
+                prop_key_fetched = result_single_prop["command"][3]
+
+            if result_single_prop.get("return_code") == 0:
+                stdout_val = result_single_prop.get("stdout", "").strip()
+                collected_props_internal_keys[prop_key_fetched] = stdout_val if stdout_val else "" 
+            else: 
+                collected_props_internal_keys[prop_key_fetched] = "Error fetching"
+            
+            remaining_props_count -= 1
+            
+            if remaining_props_count <= 0:
+                if callback_after_all_props and callable(callback_after_all_props):
+                    callback_after_all_props(collected_props_internal_keys)
+        
+        for _, prop_to_fetch_key in DEVICE_INFO_PROPERTIES: 
+            self.execute_command_async(
+                ["adb", "shell", "getprop", prop_to_fetch_key],
+                operation_name=f"Get Property ({prop_to_fetch_key})", 
+                callback_on_finish=_after_single_prop_fetch,
+                is_part_of_sequence=True, 
+                is_info_gathering=True 
+            )
+
+
+    def set_language(self, lang):
+        # ... (Same as before)
+        if lang in LABELS:
+            self.app_controller.lang = lang 
+            self.lang = lang
+            self.labels = get_labels(self.lang)
+            self._rebuild_ui() 
+            log_to_file_debug_globally(f"Language changed to {lang}.")
+        else:
+            log_to_file_debug_globally(f"Language {lang} not supported.", "WARNING")
+
+    def set_theme(self, theme_name):
+        # ... (Same as before)
+        if theme_name in THEMES:
+            self.app_controller.theme_mode = theme_name 
+            self.theme_mode = theme_name
+            self.theme = get_theme(theme_name)
+            self._rebuild_ui() 
+            log_to_file_debug_globally(f"Theme changed to {theme_name}.")
+        else:
+            log_to_file_debug_globally(f"Theme {theme_name} not supported.", "WARNING")
+
+    def _rebuild_ui(self):
+        # ... (Same as before, but now also needs to handle device_status_panel restoration)
+        log_to_file_debug_globally("Rebuilding UI...")
+        current_tab_index = 0
+        if hasattr(self, 'notebook') and self.notebook.winfo_exists():
+            try:
+                current_tab_index = self.notebook.index(self.notebook.select())
+            except tk.TclError: pass 
+        
+        temp_status_vars_values = {}
+        if hasattr(self, 'status_vars') and self.status_vars:
+            for key, var in self.status_vars.items():
+                if isinstance(var, tk.StringVar):
+                    temp_status_vars_values[key] = var.get()
+
+        children_to_destroy = list(self.winfo_children()) 
+        for widget in children_to_destroy:
+            if widget.winfo_exists(): 
+                 widget.destroy()
+        
+        self._apply_styles() 
+        self._build_ui() # This will recreate device_status_panel and its StringVars
+        
+        # Restore status_vars values if they existed
+        if hasattr(self, 'status_vars') and self.status_vars:
+            for key, value in temp_status_vars_values.items():
+                if key in self.status_vars and isinstance(self.status_vars[key], tk.StringVar):
+                    self.status_vars[key].set(value)
+        
+        if hasattr(self, 'notebook') and self.notebook.winfo_exists():
+            try:
+                if self.notebook.tabs(): 
+                    self.notebook.select(current_tab_index if current_tab_index < len(self.notebook.tabs()) else 0)
+            except tk.TclError: 
+                log_to_file_debug_globally("Error selecting tab after UI rebuild, or no tabs exist.", "WARNING")
+        
+        log_to_file_debug_globally("UI Rebuilt.")
+
+    def _on_closing(self):
+        # ... (Same as before)
+        log_to_file_debug_globally("Application closing attempt.")
+        if messagebox.askokcancel(self.labels.get("quit_dialog_title", "Quit"),
+                                 self.labels.get("quit_dialog_message", "Do you want to quit?"),
+                                 parent=self.master):
+            if hasattr(self, 'status_bar') and self.status_bar.winfo_exists():
+                self.status_bar.cancel_adb_check()
+            if hasattr(self, 'db_logger') and self.db_logger:
+                self.db_logger.close()
+            
+            if hasattr(self, 'after_id_process_command_queue') and self.after_id_process_command_queue:
+                self.after_cancel(self.after_id_process_command_queue)
+                self.after_id_process_command_queue = None
+
+            log_to_file_debug_globally("Application closed by user.")
+            self.master.destroy() 
+
+class SamsungTab(ttk.Frame):
+    # ... (SamsungTab, remove arabize_note label)
+    def __init__(self, parent_notebook, master_app: UltimateDeviceTool): 
+        log_to_file_debug_globally("SamsungTab __init__ started.")
+        super().__init__(parent_notebook, style="TFrame")
+        self.master_app = master_app
+        self.labels = master_app.labels
+        self.theme = master_app.theme
+        self.configure(padding=(15,15))
+        
+        self.num_frp_steps = 0 
+        self.current_frp_step = 0 
+
+        container = tk.Frame(self, bg=self.theme.get("BG", "#21252B"))
+        container.pack(fill=tk.BOTH, expand=True)
+
+        group_samsung = tk.LabelFrame(container, text=self.labels.get("group_samsung", "Samsung ADB Repair & Utilities"),
+                                    font=LABEL_FONT, bg=self.theme.get("GROUP_BG", self.theme["BG"]),
+                                    fg=self.theme.get("FG", "#D1D9E0"), padx=15, pady=15, relief="groove", bd=2)
+        group_samsung.pack(pady=10, padx=10, fill=tk.BOTH, expand=True)
+        
+        col1_frame = tk.Frame(group_samsung, bg=self.theme.get("GROUP_BG", self.theme["BG"]))
+        col1_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0,10), anchor=tk.N)
+
+        ModernButton(col1_frame, text=self.labels.get("btn_get_detailed_info"), 
+                                   command=self.action_read_device_info, theme=self.theme, width=28).pack(pady=4, anchor=tk.W) # Adjusted width/pady
+        ModernButton(col1_frame, text=self.labels.get("btn_reboot_rec", "Reboot Recovery"),
+                                       command=self.action_reboot_recovery, theme=self.theme, width=28).pack(pady=4, anchor=tk.W)
+        ModernButton(col1_frame, text=self.labels.get("btn_reboot_dl", "Reboot Download"),
+                                       command=self.action_reboot_download, theme=self.theme, width=28).pack(pady=4, anchor=tk.W)
+        ModernButton(col1_frame, text=self.labels.get("btn_reboot_bl", "Reboot Bootloader"),
+                                       command=self.action_reboot_bootloader, theme=self.theme, width=28).pack(pady=4, anchor=tk.W)
+
+        col2_frame = tk.Frame(group_samsung, bg=self.theme.get("GROUP_BG", self.theme["BG"]))
+        col2_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(10,0), anchor=tk.N)
+
+        ModernButton(col2_frame, text=self.labels.get("btn_remove_frp", "Remove FRP (ADB)"),
+                                       command=self.action_remove_frp_adb, theme=self.theme, width=28).pack(pady=4, anchor=tk.W)
+        ModernButton(col2_frame, text=self.labels.get("btn_factory_reset", "Factory Reset (ADB)"),
+                                       command=self.action_factory_reset_adb, theme=self.theme, width=28).pack(pady=4, anchor=tk.W)
+        ModernButton(col2_frame, text=self.labels.get("btn_screenlock_reset", "Reset Screen Lock (ADB)"),
+                                       command=self.action_reset_screenlock_adb, theme=self.theme, width=28).pack(pady=4, anchor=tk.W)
+        ModernButton(col2_frame, text=self.labels.get("btn_arabize_device", "Arabize Device (ADB)"),
+                                       command=self.action_arabize_device, theme=self.theme, width=28).pack(pady=4, anchor=tk.W)
+        ModernButton(col2_frame, text=self.labels.get("btn_open_browser_adb", "Open Browser (ADB)"),
+                                       command=self.action_open_browser_adb, theme=self.theme, width=28).pack(pady=4, anchor=tk.W)
+        
+        # Arabize note removed
+        log_to_file_debug_globally("SamsungTab __init__ finished.")
+
+    def action_read_device_info(self):
+        # ... (Same as before)
+        self.master_app.fetch_and_log_device_info(
+            operation_label_key_on_success="log_read_info_complete", 
+            next_operation_name=self.labels.get("btn_get_detailed_info") 
+            )
+
+    def action_reboot_recovery(self):
+        # ... (Same as before)
+        command = ["adb", "reboot", "recovery"]
+        self.master_app.execute_command_async(command, operation_name="Reboot to Recovery")
+
+    def action_reboot_download(self):
+        # ... (Same as before)
+        command = ["adb", "reboot", "download"]
+        self.master_app.execute_command_async(command, operation_name="Reboot to Download Mode")
+
+    def action_reboot_bootloader(self):
+        # ... (Same as before)
+        command = ["adb", "reboot", "bootloader"]
+        self.master_app.execute_command_async(command, operation_name="Reboot to Bootloader")
+
+    def action_remove_frp_adb(self):
+        # ... (Same as before)
+        if not messagebox.askokcancel(
+            self.labels.get("frp_reset_warning_title", "FRP Reset Attempt"),
+            self.labels.get("frp_reset_warning_message", "This will attempt a series of ADB commands... Proceed with caution."),
+            icon=messagebox.WARNING,
+            parent=self.master_app.master):
+            if self.master_app.log_panel: self.master_app.log_panel.log("FRP Reset (ADB) cancelled by user.", "info", include_timestamp=True)
+            return
+        
+        def _start_frp_sequence_after_info(info_result):
+            if info_result.get("return_code") != 0: 
+                if self.master_app.log_panel:
+                    self.master_app.log_panel.log("Could not get complete device info before FRP reset. Aborting FRP.", "error", include_timestamp=True)
+                    self.master_app.log_panel.progress_bar.stop()
+                    self.master_app._update_cancel_button_state(enable=False)
+                return
+
+            if self.master_app.log_panel: 
+                self.master_app.log_panel.log("Starting FRP Reset sequence (ADB)...", "info", indent=0, include_timestamp=True)
+            
+            self.commands_frp_sequence = [
+                (["adb", "shell", "settings", "put", "global", "setup_wizard_has_run", "1"], "Set setup_wizard_has_run to 1"),
+                (["adb", "shell", "settings", "put", "secure", "user_setup_complete", "1"], "Set user_setup_complete (secure table)"),
+                (["adb", "shell", "settings", "put", "global", "device_provisioned", "1"], "Set device_provisioned to 1"),
+                (["adb", "shell", "content", "insert", "--uri", "content://settings/secure", "--bind", "name:s:user_setup_complete", "--bind", "value:s:1"], "Insert user_setup_complete via content provider"),
+            ]
+            self.num_frp_steps = len(self.commands_frp_sequence)
+            self.current_frp_step = 0
+
+            if self.master_app.log_panel and self.master_app.log_panel.winfo_exists():
+                self.master_app.log_panel.progress_bar.set_value(0) 
+
+            self._execute_next_frp_step()
+
+        self.master_app.fetch_and_log_device_info(
+            operation_label_key_on_success="log_frp_reset_ok", 
+            callback_after_info_and_op=_start_frp_sequence_after_info, 
+            next_operation_name=self.labels.get("btn_remove_frp") 
+        )
+
+
+    def _execute_next_frp_step(self):
+        # ... (Same as before)
+        if self.current_frp_step < self.num_frp_steps:
+            command, op_desc = self.commands_frp_sequence[self.current_frp_step]
+            
+            if self.master_app.log_panel: self.master_app.log_panel.log(f"Attempting FRP Step: {op_desc}", "info", indent=1, include_timestamp=False)
+
+            self.master_app.execute_command_async(
+                command,
+                operation_name=f"FRP Step: {op_desc}",
+                callback_on_finish=self._frp_step_callback,
+                is_part_of_sequence=True 
+            )
+        else: 
+            if self.master_app.log_panel and self.master_app.log_panel.winfo_exists():
+                self.master_app.log_panel.log(self.labels.get("log_frp_reset_ok", "FRP Reset.... OK"), "success", include_timestamp=True)
+                self.master_app.log_panel.progress_bar.set_value(100) 
+                self.master_app.after(100, lambda: self.master_app.log_panel.progress_bar.stop() if self.master_app.log_panel and self.master_app.log_panel.winfo_exists() else None)
+                self.master_app._update_cancel_button_state(enable=False)
+
+
+    def _frp_step_callback(self, result):
+        # ... (Same as before)
+        self.current_frp_step += 1
+        
+        if self.master_app.log_panel and self.master_app.log_panel.winfo_exists():
+            progress_percentage = int((self.current_frp_step / self.num_frp_steps) * 100)
+            self.master_app.log_panel.progress_bar.set_value(progress_percentage)
+
+        if result.get("error") == "Cancelled" or \
+           (self.master_app.current_popen_process is None and self.current_frp_step < self.num_frp_steps and not result.get("error")): 
+            if self.master_app.log_panel: self.master_app.log_panel.log("FRP sequence cancelled or interrupted.", "warning", include_timestamp=True)
+            if self.master_app.log_panel and self.master_app.log_panel.winfo_exists():
+                self.master_app.log_panel.progress_bar.stop()
+                self.master_app._update_cancel_button_state(enable=False)
+            return 
+
+        if result.get("return_code", 0) != 0 and result.get("error") is None: 
+            if self.master_app.log_panel: self.master_app.log_panel.log(f"FRP step '{result.get('operation_name')}' may have failed. Continuing...", "warning", indent=1, include_timestamp=False)
+
+        self._execute_next_frp_step() 
+
+    def action_factory_reset_adb(self):
+        # ... (Same as before)
+        if messagebox.askyesno("Confirm Factory Reset", "Are you sure you want to factory reset the device via ADB? This will erase all user data.", parent=self.master_app.master):
+            command = ["adb", "shell", "wipe", "data"] 
+            self.master_app.execute_command_async(command, operation_name="Factory Reset (ADB)")
+            if self.master_app.log_panel: self.master_app.log_panel.log("Note: Factory Reset via 'adb shell wipe data' typically requires recovery mode or root.", "warning", include_timestamp=False)
+        else:
+            if self.master_app.log_panel: self.master_app.log_panel.log("Factory Reset (ADB) cancelled by user.", "info", include_timestamp=True)
+
+    def action_reset_screenlock_adb(self):
+        # ... (Same as before)
+        if messagebox.askyesno("Confirm Screen Lock Reset", "Attempt to reset screen lock via ADB? This usually requires root and may not work on all devices/Android versions. Continue?", parent=self.master_app.master):
+            
+            op_name = "Reset Screen Lock (ADB)"
+            if self.master_app.log_panel: 
+                self.master_app.log_panel.clear_log()
+                self.master_app.log_panel.log(self.labels.get("log_operation_started") + op_name, "info", include_timestamp=True)
+                self.master_app.log_panel.progress_bar.start() 
+            self.master_app._update_cancel_button_state(enable=True)
+
+
+            commands_to_try = [
+                (["adb", "shell", "rm", "/data/system/gesture.key"], "Remove gesture.key (requires root)"),
+                (["adb", "shell", "rm", "/data/system/password.key"], "Remove password.key (requires root)"),
+            ]
+            
+            num_sl_steps = len(commands_to_try)
+            current_sl_step = [0] 
+
+            def _sl_step_callback(result):
+                current_sl_step[0] +=1
+                if self.master_app.log_panel:
+                     progress_percentage = int((current_sl_step[0] / num_sl_steps) * 100)
+                     self.master_app.log_panel.progress_bar.set_value(progress_percentage)
+
+                if current_sl_step[0] >= num_sl_steps or result.get("error") == "Cancelled":
+                    if self.master_app.log_panel:
+                        if result.get("error") == "Cancelled":
+                            self.master_app.log_panel.log("Screen Lock Reset sequence cancelled.", "warning", include_timestamp=True)
+                        else:
+                            self.master_app.log_panel.log("Attempted screen lock reset. Reboot device to see effect.", "info", include_timestamp=True)
+                        self.master_app.log_panel.progress_bar.stop()
+                    self.master_app._update_cancel_button_state(enable=False)
+                    return
+                
+            for i, (cmd, desc) in enumerate(commands_to_try):
+                is_last_step = (i == len(commands_to_try) - 1)
+                self.master_app.execute_command_async(
+                    cmd, 
+                    operation_name=f"Reset SL: {desc}", 
+                    is_part_of_sequence=True, 
+                    callback_on_finish=_sl_step_callback if is_last_step else None 
+                )
+            if self.master_app.log_panel: self.master_app.log_panel.log("Screen Lock Reset commands sent. Check device. Reboot may be needed.", "info", include_timestamp=True)
+
+        else:
+            if self.master_app.log_panel: self.master_app.log_panel.log("Screen Lock Reset (ADB) cancelled by user.", "info", include_timestamp=True)
+
+    def action_arabize_device(self):
+        # ... (Same as before, but no arabize_note label to remove as it's already gone from UI build)
+        if messagebox.askyesno(
+            self.labels.get("arabize_confirm_title", "Confirm Arabization"),
+            self.labels.get("arabize_confirm_message", "This will attempt to change the device language to Arabic (ar-AE)... Proceed?"),
+            parent=self.master_app.master):
+            
+            op_name = "Arabize Device (ADB)"
+            if self.master_app.log_panel: 
+                self.master_app.log_panel.clear_log()
+                self.master_app.log_panel.log(self.labels.get("log_operation_started") + op_name, "info", include_timestamp=True)
+            
+            locale_to_set = "ar-AE" 
+            arabize_commands = [
+                (["adb", "shell", "settings", "put", "system", "system_locales", locale_to_set], f"Set system_locales to {locale_to_set}"),
+                (["adb", "shell", "setprop", "persist.sys.locale", locale_to_set], f"Set persist.sys.locale to {locale_to_set}"),
+                (["adb", "shell", "am", "broadcast", "-a", "android.intent.action.LOCALE_CHANGED"], "Broadcast Locale Change")
+            ]
+            for cmd, desc in arabize_commands:
+                 self.master_app.execute_command_async(cmd, operation_name=desc, is_part_of_sequence=True) 
+
+            if self.master_app.log_panel: 
+                self.master_app.log_panel.log("Arabization commands sent. Check device. A reboot might be needed.", "info", include_timestamp=True)
+        else:
+            if self.master_app.log_panel: self.master_app.log_panel.log("Arabization cancelled by user.", "info", include_timestamp=True)
+
+    def action_open_browser_adb(self):
+        # ... (Same as before)
+        url = simpledialog.askstring(
+            self.labels.get("open_browser_title", "Open URL"),
+            self.labels.get("open_browser_prompt", "Enter URL:"),
+            parent=self.master_app.master
+        )
+        if url and url.strip():
+            if not (url.startswith("http://") or url.startswith("https://")):
+                messagebox.showwarning("Invalid URL", "Please enter a full URL including http:// or https://", parent=self.master_app.master)
+                if self.master_app.log_panel: self.master_app.log_panel.log(f"Invalid URL for Open Browser: {url}", "warning", include_timestamp=False)
+                return
+
+            command = ["adb", "shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", url.strip()]
+            self.master_app.execute_command_async(command, operation_name=f"Open URL: {url.strip()}")
+        elif url is not None: 
+             messagebox.showwarning("Empty URL", "URL cannot be empty.", parent=self.master_app.master)
+             if self.master_app.log_panel: self.master_app.log_panel.log("Open Browser: URL was empty.", "info", include_timestamp=False)
+        else: 
+            if self.master_app.log_panel: self.master_app.log_panel.log("Open Browser action cancelled by user.", "info", include_timestamp=True)
+
+
+class HonorTab(ttk.Frame):
+    # ... (HonorTab with smaller buttons)
+    def __init__(self, parent_notebook, master_app: UltimateDeviceTool):
+        log_to_file_debug_globally("HonorTab __init__ started.")
+        super().__init__(parent_notebook, style="TFrame")
+        self.master_app = master_app
+        self.labels = master_app.labels
+        self.theme = master_app.theme
+        self.configure(padding=(15,15))
+
+        container = tk.Frame(self, bg=self.theme.get("BG", "#21252B"))
+        container.pack(fill=tk.BOTH, expand=True)
+
+        group_honor = tk.LabelFrame(container, text=self.labels.get("group_honor", "Honor Fastboot Tools"),
+                                    font=LABEL_FONT, bg=self.theme.get("GROUP_BG", self.theme["BG"]),
+                                    fg=self.theme.get("FG", "#D1D9E0"), padx=10, pady=10, relief="groove", bd=2)
+        group_honor.pack(pady=10, padx=10, fill=tk.BOTH, expand=True)
+
+        ModernButton(group_honor, text=self.labels.get("btn_honor_info", "Read Serial & Software Info"),
+                                   command=self.action_honor_info, theme=self.theme, width=33).pack(pady=4, anchor=tk.W) # Adjusted width/pady
+        ModernButton(group_honor, text=self.labels.get("btn_honor_reboot_bl", "Reboot Bootloader (Honor)"),
+                                       command=self.action_honor_reboot_bootloader, theme=self.theme, width=33).pack(pady=4, anchor=tk.W)
+        ModernButton(group_honor, text=self.labels.get("btn_honor_reboot_edl", "Reboot EDL (Honor)"),
+                                       command=self.action_honor_reboot_edl, theme=self.theme, width=33).pack(pady=4, anchor=tk.W)
+        ModernButton(group_honor, text=self.labels.get("btn_honor_wipe_data_cache", "Wipe Data/Cache (Honor)"),
+                                       command=self.action_honor_wipe_data_cache, theme=self.theme, width=33).pack(pady=4, anchor=tk.W)
+        
+        frp_frame = tk.Frame(group_honor, bg=self.theme.get("GROUP_BG", self.theme["BG"]))
+        frp_frame.pack(fill=tk.X, pady=(10,5), anchor=tk.W)
+        tk.Label(frp_frame, text=self.labels.get("honor_frp_key_label", "Honor FRP Key:"),
+                 font=FONT, bg=self.theme.get("GROUP_BG", self.theme["BG"]),
+                 fg=self.theme.get("FG", "#D1D9E0")).pack(side=tk.LEFT, padx=(0,5))
+        self.honor_frp_key_var = tk.StringVar()
+        honor_frp_entry = tk.Entry(frp_frame, textvariable=self.honor_frp_key_var, width=20, font=FONT,
+                                   bg=self.theme.get("LOG_BG", "#2C313A"), fg=self.theme.get("FG", "#D1D9E0"),
+                                   insertbackground=self.theme["FG"], relief="flat", bd=2, highlightthickness=1,
+                                   highlightbackground=self.theme.get("ACCENT2", DARK_BLUE_ACCENT2), highlightcolor=self.theme.get("ACCENT", DARK_BLUE_ACCENT))
+        honor_frp_entry.pack(side=tk.LEFT, padx=5, ipady=2)
+        TextContextMenu(honor_frp_entry, self.master_app.master, self.labels) 
+
+        ModernButton(frp_frame, text=self.labels.get("btn_honor_frp", "Remove FRP (Honor Code)"),
+                                   command=self.action_honor_remove_frp, theme=self.theme, width=23, height=1).pack(side=tk.LEFT, padx=5) # Adjusted
+        log_to_file_debug_globally("HonorTab __init__ finished.")
+
+    def action_honor_info(self):
+        # ... (Same as before)
+        op_name = "Honor Get Info (Fastboot)"
+        command = ["fastboot", "getvar", "all"]
+        self.master_app.execute_command_async(command, operation_name=op_name)
+
+    def action_honor_reboot_bootloader(self):
+        # ... (Same as before)
+        command = ["fastboot", "reboot-bootloader"]
+        self.master_app.execute_command_async(command, operation_name="Honor Reboot Bootloader")
+
+    def action_honor_reboot_edl(self):
+        # ... (Same as before)
+        command = ["fastboot", "oem", "edl"] 
+        self.master_app.execute_command_async(command, operation_name="Honor Reboot EDL")
+
+    def action_honor_wipe_data_cache(self):
+        # ... (Same as before)
+        if messagebox.askyesno("Confirm Wipe", "Are you sure you want to wipe data and cache on this Honor device? This will erase all user data.", parent=self.master_app.master):
+            op_name = "Honor Wipe Data/Cache"
+            if self.master_app.log_panel: 
+                self.master_app.log_panel.clear_log()
+                self.master_app.log_panel.log(self.labels.get("log_operation_started") + op_name, "info", include_timestamp=True)
+            
+            self.master_app.execute_command_async(["fastboot", "erase", "cache"], operation_name="Honor Wipe Cache", is_part_of_sequence=True)
+            self.master_app.execute_command_async(["fastboot", "erase", "userdata"], operation_name="Honor Wipe Userdata", is_part_of_sequence=True)
+            
+            if self.master_app.log_panel: 
+                self.master_app.log_panel.log("Honor Wipe Data/Cache commands sent. Device may need manual reboot.", "info", include_timestamp=True)
+        else:
+            if self.master_app.log_panel: self.master_app.log_panel.log("Honor Wipe Data/Cache cancelled by user.", "info", include_timestamp=True)
+
+    def action_honor_remove_frp(self):
+        # ... (Same as before)
+        frp_key = self.honor_frp_key_var.get()
+        if not frp_key:
+            messagebox.showerror("Input Error", "Please enter the Honor FRP key.", parent=self.master_app.master)
+            return
+        
+        op_name = f"Honor Remove FRP with Key"
+        command = ["fastboot", "oem", "frp-unlock", frp_key] 
+        self.master_app.execute_command_async(command, operation_name=op_name)
+        if self.master_app.log_panel: self.master_app.log_panel.log("Note: Honor FRP removal methods vary. This is a common command.", "warning", include_timestamp=False)
+
+
+class XiaomiTab(ttk.Frame):
+    # ... (XiaomiTab with smaller buttons)
+    def __init__(self, parent_notebook, master_app: UltimateDeviceTool):
+        log_to_file_debug_globally("XiaomiTab __init__ started.")
+        super().__init__(parent_notebook, style="TFrame")
+        self.master_app = master_app
+        self.labels = master_app.labels
+        self.theme = master_app.theme
+        self.configure(padding=(15,15))
+        
+        container = tk.Frame(self, bg=self.theme.get("BG", "#21252B"))
+        container.pack(fill=tk.BOTH, expand=True)
+
+        group_adb = tk.LabelFrame(container, text=self.labels.get("group_xiaomi_adb", "Xiaomi ADB Mode"),
+                                  font=LABEL_FONT, bg=self.theme.get("GROUP_BG", self.theme["BG"]),
+                                  fg=self.theme.get("FG", "#D1D9E0"), padx=10, pady=10, relief="groove", bd=2)
+        group_adb.pack(pady=(0,10), padx=10, fill=tk.X, expand=False)
+        
+        adb_cols_container = tk.Frame(group_adb, bg=self.theme.get("GROUP_BG", self.theme["BG"]))
+        adb_cols_container.pack(fill=tk.X)
+        adb_col1 = tk.Frame(adb_cols_container, bg=self.theme.get("GROUP_BG", self.theme["BG"]))
+        adb_col1.pack(side=tk.LEFT, fill=tk.Y, padx=(0,10), anchor=tk.N, expand=True)
+        adb_col2 = tk.Frame(adb_cols_container, bg=self.theme.get("GROUP_BG", self.theme["BG"]))
+        adb_col2.pack(side=tk.LEFT, fill=tk.Y, padx=(10,0), anchor=tk.N, expand=True)
+
+        ModernButton(adb_col1, text=self.labels.get("btn_xiaomi_adb_info"), 
+                                   command=self.action_xiaomi_adb_info, theme=self.theme, width=28).pack(pady=4, anchor=tk.W) # Adjusted
+        ModernButton(adb_col1, text=self.labels.get("btn_xiaomi_reboot_normal_adb", "Reboot Normal (ADB)"),
+                                   command=lambda: self.master_app.execute_command_async(["adb", "reboot"], "Xiaomi Reboot Normal (ADB)"), theme=self.theme, width=28).pack(pady=4, anchor=tk.W)
+        ModernButton(adb_col1, text=self.labels.get("btn_xiaomi_reboot_recovery_adb", "Reboot Recovery (ADB)"),
+                                   command=lambda: self.master_app.execute_command_async(["adb", "reboot", "recovery"], "Xiaomi Reboot Recovery (ADB)"), theme=self.theme, width=28).pack(pady=4, anchor=tk.W)
+        
+        ModernButton(adb_col2, text=self.labels.get("btn_xiaomi_reboot_fastboot_adb", "Reboot Fastboot (ADB)"),
+                                   command=lambda: self.master_app.execute_command_async(["adb", "reboot", "bootloader"], "Xiaomi Reboot Fastboot (ADB)"), theme=self.theme, width=28).pack(pady=4, anchor=tk.W)
+        ModernButton(adb_col2, text=self.labels.get("btn_xiaomi_reboot_edl_adb", "Reboot EDL (ADB)"),
+                                   command=lambda: self.master_app.execute_command_async(["adb", "reboot", "edl"], "Xiaomi Reboot EDL (ADB)"), theme=self.theme, width=28).pack(pady=4, anchor=tk.W)
+        ModernButton(adb_col2, text=self.labels.get("btn_xiaomi_enable_diag_root", "Enable Diag (ROOT)") + " *",
+                                   command=lambda: messagebox.showinfo("Info", "Enable Diag (ROOT) is a placeholder for specific Xiaomi Diag enabling commands, which usually require root and device-specific knowledge.", parent=self.master_app.master), theme=self.theme, width=28).pack(pady=4, anchor=tk.W)
+
+
+        group_fastboot = tk.LabelFrame(container, text=self.labels.get("group_xiaomi_fastboot", "Xiaomi Fastboot Mode"),
+                                       font=LABEL_FONT, bg=self.theme.get("GROUP_BG", self.theme["BG"]),
+                                       fg=self.theme.get("FG", "#D1D9E0"), padx=10, pady=10, relief="groove", bd=2)
+        group_fastboot.pack(pady=10, padx=10, fill=tk.BOTH, expand=True)
+
+        fb_cols_container = tk.Frame(group_fastboot, bg=self.theme.get("GROUP_BG", self.theme["BG"]))
+        fb_cols_container.pack(fill=tk.X)
+        fb_col1 = tk.Frame(fb_cols_container, bg=self.theme.get("GROUP_BG", self.theme["BG"]))
+        fb_col1.pack(side=tk.LEFT, fill=tk.Y, padx=(0,10), anchor=tk.N, expand=True)
+        fb_col2 = tk.Frame(fb_cols_container, bg=self.theme.get("GROUP_BG", self.theme["BG"]))
+        fb_col2.pack(side=tk.LEFT, fill=tk.Y, padx=(10,0), anchor=tk.N, expand=True)
+
+        ModernButton(fb_col1, text=self.labels.get("btn_xiaomi_fastboot_info", "Read Info (Fastboot)"),
+                                   command=lambda: self.master_app.execute_command_async(["fastboot", "getvar", "all"], "Xiaomi Read Info (Fastboot)"), theme=self.theme, width=28).pack(pady=4, anchor=tk.W)
+        ModernButton(fb_col1, text=self.labels.get("btn_xiaomi_fastboot_read_security", "Read Security (Fastboot)"),
+                                   command=lambda: self.master_app.execute_command_async(["fastboot", "oem", "device-info"], "Xiaomi Read Security (Fastboot)"), theme=self.theme, width=28).pack(pady=4, anchor=tk.W)
+        ModernButton(fb_col1, text=self.labels.get("btn_xiaomi_fastboot_unlock", "Unlock Bootloader (Fastboot)"),
+                                   command=self.action_xiaomi_fastboot_unlock, theme=self.theme, width=28).pack(pady=4, anchor=tk.W)
+        ModernButton(fb_col1, text=self.labels.get("btn_xiaomi_fastboot_lock", "Lock Bootloader (Fastboot)"),
+                                   command=self.action_xiaomi_fastboot_lock, theme=self.theme, width=28).pack(pady=4, anchor=tk.W)
+        
+        ModernButton(fb_col2, text=self.labels.get("btn_xiaomi_fastboot_reboot_sys", "Reboot System (Fastboot)"),
+                                   command=lambda: self.master_app.execute_command_async(["fastboot", "reboot"], "Xiaomi Reboot System (Fastboot)"), theme=self.theme, width=28).pack(pady=4, anchor=tk.W)
+        ModernButton(fb_col2, text=self.labels.get("btn_xiaomi_fastboot_reboot_fast", "Reboot Fastboot (Fastboot)"),
+                                   command=lambda: self.master_app.execute_command_async(["fastboot", "reboot-bootloader"], "Xiaomi Reboot Fastboot (Fastboot)"), theme=self.theme, width=28).pack(pady=4, anchor=tk.W)
+        ModernButton(fb_col2, text=self.labels.get("btn_xiaomi_fastboot_reboot_edl", "Reboot EDL (Fastboot)"),
+                                   command=lambda: self.master_app.execute_command_async(["fastboot", "oem", "edl"], "Xiaomi Reboot EDL (Fastboot)"), theme=self.theme, width=28).pack(pady=4, anchor=tk.W)
+        ModernButton(fb_col2, text=self.labels.get("btn_xiaomi_fastboot_wipe_cache", "Wipe Cache (Fastboot)"),
+                                   command=lambda: self.master_app.execute_command_async(["fastboot", "erase", "cache"], "Xiaomi Wipe Cache (Fastboot)"), theme=self.theme, width=28).pack(pady=4, anchor=tk.W)
+        ModernButton(fb_col2, text=self.labels.get("btn_xiaomi_fastboot_wipe_data", "Wipe Data (Fastboot)"),
+                                   command=self.action_xiaomi_fastboot_wipe_data, theme=self.theme, width=28).pack(pady=4, anchor=tk.W)
+        log_to_file_debug_globally("XiaomiTab __init__ finished.")
+
+    def action_xiaomi_adb_info(self):
+        # ... (Same as before)
+        self.master_app.fetch_and_log_device_info(
+            operation_label_key_on_success="log_read_info_complete",
+            next_operation_name=self.labels.get("btn_xiaomi_adb_info") 
+            )
+
+
+    def action_xiaomi_fastboot_unlock(self):
+        # ... (Same as before)
+        if messagebox.askyesno("Confirm Unlock", "Are you sure you want to unlock the bootloader? This will erase all user data and may void warranty. For Xiaomi, this often requires Mi Unlock Tool and an authorized account.", parent=self.master_app.master):
+            self.master_app.execute_command_async(["fastboot", "oem", "unlock"], operation_name="Xiaomi Unlock Bootloader (Attempt)")
+            if self.master_app.log_panel: self.master_app.log_panel.log("Note: Xiaomi bootloader unlock often requires official Mi Unlock Tool and account authorization. This command attempts the generic fastboot unlock.", "warning", include_timestamp=False)
+        else:
+            if self.master_app.log_panel: self.master_app.log_panel.log("Xiaomi Unlock Bootloader cancelled by user.", "info", include_timestamp=True)
+
+    def action_xiaomi_fastboot_lock(self):
+        # ... (Same as before)
+        if messagebox.askyesno("Confirm Lock", "Are you sure you want to lock the bootloader? This will erase all user data if the device is not already formatted for a locked state.", parent=self.master_app.master):
+            self.master_app.execute_command_async(["fastboot", "oem", "lock"], operation_name="Xiaomi Lock Bootloader")
+        else:
+            if self.master_app.log_panel: self.master_app.log_panel.log("Xiaomi Lock Bootloader cancelled by user.", "info", include_timestamp=True)
+
+    def action_xiaomi_fastboot_wipe_data(self):
+        # ... (Same as before)
+        if messagebox.askyesno("Confirm Wipe", "Are you sure you want to wipe all user data? This cannot be undone.", parent=self.master_app.master):
+            self.master_app.execute_command_async(["fastboot", "erase", "userdata"], operation_name="Xiaomi Wipe Data (Fastboot)")
+        else:
+            if self.master_app.log_panel: self.master_app.log_panel.log("Xiaomi Wipe Data cancelled by user.", "info", include_timestamp=True)
+
+class FileAdvancedTab(ttk.Frame):
+    # ... (FileAdvancedTab with smaller buttons and new Browse Apps button)
+    def __init__(self, parent_notebook, master_app: UltimateDeviceTool):
+        log_to_file_debug_globally("FileAdvancedTab __init__ started.")
+        super().__init__(parent_notebook, style="TFrame")
+        self.master_app = master_app
+        self.labels = master_app.labels
+        self.theme = master_app.theme
+        self.configure(padding=(15,15))
+
+        container = tk.Frame(self, bg=self.theme.get("BG", "#21252B"))
+        container.pack(fill=tk.BOTH, expand=True)
+
+        group_file = tk.LabelFrame(container, text=self.labels.get("group_file", "File & App Management"),
+                                   font=LABEL_FONT, bg=self.theme.get("GROUP_BG", self.theme["BG"]),
+                                   fg=self.theme.get("FG", "#D1D9E0"), padx=10, pady=10, relief="groove", bd=2)
+        group_file.pack(pady=(0,10), padx=10, fill=tk.X, expand=False)
+        
+        file_cols_container = tk.Frame(group_file, bg=self.theme.get("GROUP_BG", self.theme["BG"]))
+        file_cols_container.pack(fill=tk.X)
+        file_col1 = tk.Frame(file_cols_container, bg=self.theme.get("GROUP_BG", self.theme["BG"]))
+        file_col1.pack(side=tk.LEFT, fill=tk.Y, padx=(0,5), anchor=tk.N, expand=True) 
+        file_col2 = tk.Frame(file_cols_container, bg=self.theme.get("GROUP_BG", self.theme["BG"]))
+        file_col2.pack(side=tk.LEFT, fill=tk.Y, padx=(5,0), anchor=tk.N, expand=True) 
+
+        ModernButton(file_col1, text=self.labels.get("btn_pull_file", "Pull File from Device"),
+                                   command=self.action_pull_file, theme=self.theme, width=28).pack(pady=4, anchor=tk.W) # Adjusted
+        ModernButton(file_col1, text=self.labels.get("btn_push_file", "Push File to Device"),
+                                   command=self.action_push_file, theme=self.theme, width=28).pack(pady=4, anchor=tk.W)
+        ModernButton(file_col1, text=self.labels.get("btn_backup_user_data_adb", "Backup User Data (ADB)"), 
+                                   command=self.action_backup_user_data, theme=self.theme, width=28).pack(pady=4, anchor=tk.W)
+        
+        ModernButton(file_col2, text=self.labels.get("btn_install_apk", "Install APK"),
+                                   command=self.action_install_apk, theme=self.theme, width=28).pack(pady=4, anchor=tk.W)
+        ModernButton(file_col2, text=self.labels.get("btn_uninstall_app", "Uninstall App"),
+                                   command=self.action_uninstall_app, theme=self.theme, width=28).pack(pady=4, anchor=tk.W)
+        ModernButton(file_col2, text=self.labels.get("btn_restore_user_data_adb", "Restore User Data (ADB)"), 
+                                   command=self.action_restore_user_data, theme=self.theme, width=28).pack(pady=4, anchor=tk.W)
+        
+        # Add Browse Apps button here
+        ModernButton(file_col1, text=self.labels.get("btn_browse_apps", "Browse Apps"), 
+                     command=self.action_browse_apps, theme=self.theme, width=28).pack(pady=4, anchor=tk.W)
+
+
+        group_advanced = tk.LabelFrame(container, text=self.labels.get("group_advanced_cmd", "Advanced Command Execution"),
+                                       font=LABEL_FONT, bg=self.theme.get("GROUP_BG", self.theme["BG"]),
+                                       fg=self.theme.get("FG", "#D1D9E0"), padx=10, pady=10, relief="groove", bd=2)
+        group_advanced.pack(pady=10, padx=10, fill=tk.BOTH, expand=True)
+
+        tk.Label(group_advanced, text=self.labels.get("advanced_cmd_label", "Enter ADB or Fastboot command:"),
+                 font=FONT, bg=self.theme.get("GROUP_BG", self.theme["BG"]),
+                 fg=self.theme.get("FG", "#D1D9E0")).pack(anchor=tk.W, pady=(5,2))
+        
+        self.advanced_cmd_var = tk.StringVar()
+        advanced_cmd_entry = tk.Entry(group_advanced, textvariable=self.advanced_cmd_var, width=60, font=FONT,
+                                      bg=self.theme.get("LOG_BG", "#2C313A"), fg=self.theme.get("FG", "#D1D9E0"),
+                                      insertbackground=self.theme["FG"], relief="flat", bd=2, highlightthickness=1,
+                                      highlightbackground=self.theme.get("ACCENT2", DARK_BLUE_ACCENT2), highlightcolor=self.theme.get("ACCENT", DARK_BLUE_ACCENT))
+        advanced_cmd_entry.pack(fill=tk.X, pady=(0,5), ipady=3)
+        TextContextMenu(advanced_cmd_entry, self.master_app.master, self.labels) 
+
+        ModernButton(group_advanced, text=self.labels.get("btn_run_advanced_cmd", "Run Command"),
+                                   command=self.action_run_advanced_cmd, theme=self.theme, width=18).pack(pady=5, anchor=tk.W) # Adjusted
+        log_to_file_debug_globally("FileAdvancedTab __init__ finished.")
+
+    def action_browse_apps(self):
+        if hasattr(self.master_app.app_controller, 'root') and self.master_app.app_controller.root.winfo_exists():
+            AppBrowserWindow(self.master_app.master, self.master_app.app_controller)
+        else:
+            log_to_file_debug_globally("Cannot open App Browser: Main app root window does not exist.", "ERROR")
+
+
+    def action_pull_file(self):
+        # ... (Same as before)
+        device_path = simpledialog.askstring(self.labels.get("pull_file_title", "Pull File from Device"),
+                                            self.labels.get("pull_file_device_path_msg", "Enter device source path:"),
+                                            parent=self.master_app.master)
+        if not device_path or not device_path.strip(): 
+            if self.master_app.log_panel: self.master_app.log_panel.log("Pull file: No device path entered.", "info", include_timestamp=False)
+            return
+        
+        local_path = filedialog.asksaveasfilename(parent=self.master_app.master, title="Save File As", initialfile=os.path.basename(device_path.strip()))
+        if not local_path: 
+            if self.master_app.log_panel: self.master_app.log_panel.log("Pull file: No local save path selected.", "info", include_timestamp=False)
+            return
+        
+        self.master_app.execute_command_async(["adb", "pull", device_path.strip(), local_path],
+                                             operation_name=f"Pull File: {os.path.basename(device_path.strip())}")
+
+    def action_push_file(self):
+        # ... (Same as before)
+        local_path = filedialog.askopenfilename(parent=self.master_app.master, title="Select File to Push")
+        if not local_path: 
+            if self.master_app.log_panel: self.master_app.log_panel.log("Push file: No local file selected.", "info", include_timestamp=False)
+            return
+        
+        device_path = simpledialog.askstring(self.labels.get("push_file_title", "Push File to Device"),
+                                            self.labels.get("push_file_device_path_msg", "Enter device destination path:"),
+                                            parent=self.master_app.master, initialvalue=f"/sdcard/{os.path.basename(local_path)}")
+        if not device_path or not device_path.strip(): 
+            if self.master_app.log_panel: self.master_app.log_panel.log("Push file: No device path entered.", "info", include_timestamp=False)
+            return
+        
+        self.master_app.execute_command_async(["adb", "push", local_path, device_path.strip()],
+                                             operation_name=f"Push File: {os.path.basename(local_path)}")
+
+    def action_install_apk(self):
+        # ... (Same as before)
+        apk_path = filedialog.askopenfilename(title=self.labels.get("install_apk_title", "Select APK to Install"),
+                                             filetypes=[("APK Files", "*.apk"), ("All Files", "*.*")],
+                                             parent=self.master_app.master)
+        if not apk_path: 
+            if self.master_app.log_panel: self.master_app.log_panel.log("Install APK: No APK file selected.", "info", include_timestamp=False)
+            return
+        
+        self.master_app.execute_command_async(["adb", "install", "-r", apk_path], 
+                                             operation_name=f"Install APK: {os.path.basename(apk_path)}")
+
+    def action_uninstall_app(self):
+        # ... (Same as before)
+        package_name = simpledialog.askstring(self.labels.get("uninstall_title", "Uninstall App"),
+                                             self.labels.get("uninstall_msg", "Enter package name:"),
+                                             parent=self.master_app.master)
+        if not package_name or not package_name.strip(): 
+            if self.master_app.log_panel: self.master_app.log_panel.log("Uninstall App: No package name entered.", "info", include_timestamp=False)
+            return
+        
+        self.master_app.execute_command_async(["adb", "uninstall", package_name.strip()],
+                                             operation_name=f"Uninstall App: {package_name.strip()}")
+
+    def action_backup_user_data(self):
+        # ... (Same as before)
+        backup_file_path = filedialog.asksaveasfilename(
+            title=self.labels.get("backup_user_data_title", "Save Backup As"),
+            defaultextension=".ab",
+            filetypes=[("ADB Backup Files", "*.ab"), ("All Files", "*.*")],
+            parent=self.master_app.master
+        )
+        if not backup_file_path:
+            if self.master_app.log_panel: self.master_app.log_panel.log("Backup User Data: Cancelled by user.", "info", include_timestamp=True)
+            return
+
+        command = ["adb", "backup", "-f", backup_file_path, "-all"] 
+        operation_name = "Backup User Apps Data"
+
+        if self.master_app.log_panel: 
+            self.master_app.log_panel.log("ADB Backup requires confirmation on the device. The operation will wait.", "warning", include_timestamp=False) 
+        self.master_app.execute_command_async(command, operation_name=operation_name)
+
+
+    def action_restore_user_data(self):
+        # ... (Same as before)
+        backup_file_path = filedialog.askopenfilename(
+            title=self.labels.get("restore_user_data_title", "Select Backup to Restore"),
+            filetypes=[("ADB Backup Files", "*.ab"), ("All Files", "*.*")],
+            parent=self.master_app.master
+        )
+        if not backup_file_path:
+            if self.master_app.log_panel: self.master_app.log_panel.log("Restore User Data: Cancelled by user.", "info", include_timestamp=True)
+            return
+
+        command = ["adb", "restore", backup_file_path]
+        operation_name = "Restore User Data"
+        if self.master_app.log_panel: 
+            self.master_app.log_panel.log("ADB Restore requires confirmation on the device. The operation will wait.", "warning", include_timestamp=False)
+
+        self.master_app.execute_command_async(command, operation_name=operation_name)
+
+
+    def action_run_advanced_cmd(self):
+        # ... (Same as before)
+        cmd_str = self.advanced_cmd_var.get().strip()
+        if not cmd_str: 
+            if self.master_app.log_panel: self.master_app.log_panel.log("Advanced Command: No command entered.", "info", include_timestamp=False)
+            return
+        
+        cmd_parts = cmd_str.split() 
+        if not cmd_parts: 
+            if self.master_app.log_panel: self.master_app.log_panel.log("Advanced Command: Command is empty after parsing.", "info", include_timestamp=False)
+            return
+        
+        if self.master_app.log_panel: self.master_app.log_panel.log(f"Executing: {cmd_str}", "cmd", include_timestamp=False)
+        self.master_app.execute_command_async(cmd_parts, operation_name=f"Advanced CMD: {cmd_parts[0]}")
+
+if __name__ == "__main__":
+    if not PIL_AVAILABLE:
+        log_to_file_debug_globally("Pillow not installed. UI may not display images correctly.", "CRITICAL")
+
+    try:
+        with open(_DEBUG_LOG_PATH, "a", encoding="utf-8") as f_log_check:
+            f_log_check.write(f"[{datetime.now()}] [INFO] Main execution block started.\n")
+    except Exception as e_log_main_check:
+        print(f"[CRITICAL_ERROR] Cannot write to main debug log '{_DEBUG_LOG_PATH}': {e_log_main_check}", file=sys.stderr)
+        _DEBUG_LOG_PATH = "application_debug_log_local.txt" 
+        try:
+            with open(_DEBUG_LOG_PATH, "a", encoding="utf-8") as f_log_fallback:
+                f_log_fallback.write(f"[{datetime.now()}] [INFO] Using fallback debug log: '{_DEBUG_LOG_PATH}'.\n")
+        except Exception as e_log_fallback_create:
+            print(f"[CRITICAL_ERROR] Cannot write to fallback debug log '{_DEBUG_LOG_PATH}': {e_log_fallback_create}", file=sys.stderr)
+
+    try:
+        try:
+            subprocess.check_output(["adb", "version"], stderr=subprocess.STDOUT, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+            log_to_file_debug_globally("ADB found and working.")
+        except Exception:
+            log_to_file_debug_globally("ADB not found or not working. Some features might be unavailable.", "WARNING")
+        
+        try:
+            subprocess.check_output(["fastboot", "--version"], stderr=subprocess.STDOUT, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+            log_to_file_debug_globally("Fastboot found and working.")
+        except Exception:
+            log_to_file_debug_globally("Fastboot not found or not working. Some features might be unavailable.", "WARNING")
+
+        controller = AppController()
+        controller.start()
+
+    except Exception as e:
+        log_to_file_debug_globally(f"Fatal error in main execution: {e}", "CRITICAL")
+        traceback.print_exc(file=open(_DEBUG_LOG_PATH, "a")) 
+        try: 
+            root_err = tk.Tk()
+            root_err.withdraw() 
+            messagebox.showerror("Fatal Error", f"A critical error occurred: {e}\n\nPlease check '{_DEBUG_LOG_PATH}' for details.", parent=None)
+            root_err.destroy()
+        except Exception as e_tk_fatal:
+            print(f"A critical error occurred: {e}. Check '{_DEBUG_LOG_PATH}'. Tkinter error dialog also failed: {e_tk_fatal}", file=sys.stderr)
